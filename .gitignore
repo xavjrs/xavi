@@ -1,0 +1,32 @@
+# Personal data and secrets: never commit these.
+# (Git only treats a line as a comment if it STARTS with '#'. Never put a comment after a pattern.)
+
+# Accounts (password hashes) and each person's portfolio / transactions
+users/
+
+# Old holdings
+backup_before_reset/
+
+# Backups made by the app
+xavi_backup_*.json
+xavi_before_restore_*.json
+
+# Per-account data files
+portfolio.json
+transactions.json
+
+# Settings (can contain API keys and an email address)
+config.json
+*.bak
+
+# Generated files: price / news cache and logs
+data_cache.json
+log.txt
+__pycache__/
+*.pyc
+*.tmp
+
+# Local tooling
+.claude/
+.vscode/
+.env

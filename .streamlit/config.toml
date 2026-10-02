@@ -1,0 +1,40 @@
+# Green theme with automatic light / dark mode.
+# Switch in the app: the three-dot menu (top right) -> Settings -> Choose app theme.
+# "Use system setting" follows your computer's light/dark choice.
+
+[theme]
+font = "Inter"
+baseFontSize = 15
+
+# Inter (variable font, Latin subset) loaded from Google Fonts by the browser.
+[[theme.fontFaces]]
+family = "Inter"
+url = "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2"
+weight = "100 900"
+style = "normal"
+
+[theme.light]
+primaryColor = "#15803d"
+backgroundColor = "#f3faf5"
+secondaryBackgroundColor = "#e7f4ec"
+textColor = "#0f2a1c"
+linkColor = "#0f766e"
+borderColor = "#c9e2d3"
+greenColor = "#16a34a"
+greenTextColor = "#15803d"
+
+[theme.dark]
+primaryColor = "#34d399"
+backgroundColor = "#07130d"
+secondaryBackgroundColor = "#0e2018"
+textColor = "#e6f2ea"
+linkColor = "#5eead4"
+borderColor = "#1c3a2b"
+greenColor = "#4ade80"
+greenTextColor = "#4ade80"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
