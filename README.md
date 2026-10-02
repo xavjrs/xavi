@@ -3,7 +3,7 @@
 
 A terminal app to track your UK investment portfolio in real-time. Holdings, diversification, news, analysis — all from the command line.
 
-**Built by a 17-year-old founder learning Python & AI to build financial tools.**
+**Built by a 16-year-old founder learning Python & AI to build financial tools.**
 
 ---
 
