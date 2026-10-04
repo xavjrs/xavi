@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import hbar, money, tile %}
+
+{% block title %}Analysis - XAVI{% endblock %}
+{% block page_title %}Diversification analysis{% endblock %}
+
+{% block content %}
+<div class="refresh-line">Prices as of {{ price_time }} ·
+    <a href="{{ url_for('dashboard', refresh=1) }}">Refresh prices</a></div>
+{% if stale %}<div class="warn">Some prices could not be refreshed, so weights use older data for those holdings.</div>{% endif %}
+
+{% if rows %}
+<div style="display:grid; grid-template-columns: 240px 1fr; gap:28px; align-items:center;">
+    {{ tile("Diversification score", score|round|int, label, 'pos' if score >= 70 else ('neg' if score < 50 else ''), unit="/100") }}
+    <div>
+        {{ hbar("Score", score, '%d%%' % score, 'green' if score >= 70 else ('accent' if score >= 50 else 'red')) }}
+        <div class="note">Score = (1 - HHI) x 100, where HHI is the sum of squared portfolio weights.
+            Equivalent to {{ '%.1f' % effective }} equal-sized positions (you hold {{ rows|length }}).
+            Cash is excluded.</div>
+    </div>
+</div>
+
+<div class="section">Holding weights</div>
+<div class="note">% of invested holdings, at today's prices</div>
+{% for r in rows %}
+    {{ hbar(r.ticker, r.hold_weight, '%.1f%%' % r.hold_weight, 'red' if r.hold_weight > 40 else 'accent') }}
+{% endfor %}
+
+<div class="section">Things worth knowing</div>
+<div class="note">Facts about the spread, not suggestions</div>
+<ul class="facts">
+    {% for fact in facts %}<li>{{ fact }}</li>{% endfor %}
+</ul>
+{% if m.cash_weight > 0 %}<div class="note">Cash is {{ '%.1f' % m.cash_weight }}% of your total portfolio and is not part of the score.</div>{% endif %}
+
+<div class="three-col">
+    {% for title, groups, heading in (("Sector breakdown", sectors, "Sector"), ("Geographic exposure", regions, "Region"), ("Currency exposure", currencies, "Currency")) %}
+    <div>
+        <div class="section">{{ title }}</div>
+        <div class="note">Holding-level labels; funds are not looked through.</div>
+        <div class="table-wrap">
+            <table class="data">
+                <thead><tr><th>{{ heading }}</th><th class="num">Value £</th><th class="num">Weight</th></tr></thead>
+                <tbody>
+                {% for name, g in groups.items() %}
+                    <tr><td>{{ name }}</td><td class="num">{{ '{:,.2f}'.format(g.value) }}</td><td class="num">{{ '%.1f%%' % g.weight }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+<div class="note" style="margin-top:14px"><a href="{{ url_for('export_csv', kind='exposure') }}">Download this breakdown (CSV)</a>.
+    Sector and region come from Yahoo or your own labels (edit them on the Dashboard); a trust such as
+    Scottish Mortgage shows as one label, not its underlying companies.</div>
+{% else %}
+<div class="empty">Add a holding on the Dashboard to see the analysis.</div>
+{% endif %}
+{% endblock %}

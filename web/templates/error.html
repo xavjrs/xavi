@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - XAVI{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block auth_content %}
+<div class="auth-card">
+    <h2>{{ title }}</h2>
+    <p class="note" style="font-size:0.9rem">{{ message }}</p>
+    <a class="btn btn-primary btn-block" href="{{ url_for('login') }}">Back to log in</a>
+</div>
+{% endblock %}
+{% block content %}
+<div class="empty">{{ message }}<br><br><a class="btn btn-primary" href="{{ url_for('dashboard') }}">Back to the dashboard</a></div>
+{% endblock %}

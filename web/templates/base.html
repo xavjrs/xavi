@@ -1,0 +1,143 @@
+{% from "_macros.html" import wordmark, hbar, theme_switch %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1180">
+    <title>{% block title %}XAVI{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        /* apply the saved light/dark choice before the page paints (no flash) */
+        try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+    </script>
+</head>
+<body>
+{% if session.get('username') %}
+<div class="app">
+    <aside class="sidebar">
+        <div class="side-logo">{{ wordmark(22) }}</div>
+
+        <form class="search" action="{{ url_for('security') }}" method="get">
+            <input type="text" name="ticker" placeholder="Search a ticker  (AAPL, BP.L)" aria-label="Search a ticker"
+                   autocomplete="off" pattern="[A-Za-z0-9.\-]{1,10}" title="1-10 letters or numbers, e.g. AAPL or BP.L">
+        </form>
+
+        <div class="side-label">Navigate</div>
+        <nav class="nav" aria-label="Main">
+            {% set ep = request.endpoint %}
+            <a href="{{ url_for('dashboard') }}" class="{{ 'active' if ep == 'dashboard' }}" {% if ep == 'dashboard' %}aria-current="page"{% endif %}>▣   Dashboard</a>
+            <a href="{{ url_for('history') }}" class="{{ 'active' if ep == 'history' }}" {% if ep == 'history' %}aria-current="page"{% endif %}>▤   History</a>
+            <a href="{{ url_for('analysis') }}" class="{{ 'active' if ep == 'analysis' }}" {% if ep == 'analysis' %}aria-current="page"{% endif %}>◧   Analysis</a>
+            <a href="{{ url_for('news') }}" class="{{ 'active' if ep == 'news' }}" {% if ep == 'news' %}aria-current="page"{% endif %}>◈   News</a>
+            <a href="{{ url_for('security') }}" class="{{ 'active' if ep == 'security' }}" {% if ep == 'security' %}aria-current="page"{% endif %}>◎   Security</a>
+            <a href="{{ url_for('settings') }}" class="{{ 'active' if ep == 'settings' }}" {% if ep == 'settings' %}aria-current="page"{% endif %}>⚙   Settings</a>
+        </nav>
+
+        <div class="side-label">Allowance</div>
+        {{ hbar(side_label, side_allowance_pct, '%.0f%% used' % side_allowance_pct, 'blue') }}
+        <div class="side-note">£{{ '{:,.2f}'.format(side_allowance_left) }} left of £{{ '{:,.2f}'.format(side_allowance_total) }}</div>
+
+        <div class="side-label">Appearance</div>
+        {{ theme_switch() }}
+
+        <div class="side-label">Account</div>
+        <div class="side-note">{{ side_name }}</div>
+        <form method="post" action="{{ url_for('logout') }}" class="side-actions">
+            {{ csrf_input() }}
+            <button type="submit" class="btn btn-small">Log out</button>
+        </form>
+    </aside>
+
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <div class="page-title">{% block page_title %}{% endblock %}</div>
+                <div class="meta">{{ side_label }} · GBP · {{ now.strftime('%d %b %Y, %H:%M') }}</div>
+            </div>
+            <div>{{ wordmark(24) }}</div>
+            <div></div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}" role="status">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+
+        <div class="foot">Information only - not financial advice. Prices and company data come
+            from Yahoo Finance: delayed, and can be wrong. News importance is a keyword score, not a
+            view on what a story means for prices. Nothing here is a recommendation to buy, sell or
+            hold anything.</div>
+    </main>
+</div>
+
+{% else %}
+<div class="auth-theme">{{ theme_switch() }}</div>
+<div class="auth-wrap">
+    <div class="auth-logo">{{ wordmark(34) }}</div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}" style="width:400px" role="status">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    {% block auth_content %}{% endblock %}
+
+    <div class="note auth-foot">Information only - not financial advice. Nothing here is a
+        recommendation to buy, sell or hold anything.</div>
+</div>
+{% endif %}
+
+<script>
+    /* ---- theme: Auto (system) / Light / Dark, remembered in this browser ---- */
+    (function () {
+        var root = document.documentElement;
+        function current() { var t = root.getAttribute('data-theme'); return t === 'light' || t === 'dark' ? t : 'auto'; }
+        function mark() {
+            document.querySelectorAll('[data-theme-set]').forEach(function (b) {
+                b.setAttribute('aria-pressed', b.getAttribute('data-theme-set') === current() ? 'true' : 'false');
+            });
+        }
+        document.querySelectorAll('[data-theme-set]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var choice = button.getAttribute('data-theme-set');
+                try {
+                    if (choice === 'auto') { root.removeAttribute('data-theme'); localStorage.removeItem('theme'); }
+                    else { root.setAttribute('data-theme', choice); localStorage.setItem('theme', choice); }
+                } catch (e) {}
+                mark();
+            });
+        });
+        mark();
+    })();
+
+    /* ---- chart hover: crosshair, dot and tooltip ---- */
+    document.querySelectorAll('.chart-wrap').forEach(function (wrap) {
+        var spec = JSON.parse(wrap.getAttribute('data-chart'));
+        var ys = wrap.getAttribute('data-ys'); ys = ys ? JSON.parse(ys) : null;
+        var svg = wrap.querySelector('svg'), tip = wrap.querySelector('.chart-tip');
+        var line = svg.querySelector('.xhair'), dot = svg.querySelector('.dot');
+        wrap.addEventListener('mousemove', function (event) {
+            var box = svg.getBoundingClientRect(), x = (event.clientX - box.left) / box.width * spec.w;
+            var lo = 0, hi = spec.xs.length - 1;
+            while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (spec.xs[mid] <= x) lo = mid; else hi = mid; }
+            var i = Math.abs(spec.xs[lo] - x) <= Math.abs(spec.xs[hi] - x) ? lo : hi;
+            line.setAttribute('x1', spec.xs[i]); line.setAttribute('x2', spec.xs[i]); line.setAttribute('visibility', 'visible');
+            if (dot && ys) { dot.setAttribute('cx', spec.xs[i]); dot.setAttribute('cy', ys[i]); dot.setAttribute('visibility', 'visible'); }
+            tip.textContent = spec.tips[i]; tip.hidden = false;
+            var px = spec.xs[i] / spec.w * box.width;
+            tip.style.left = Math.min(Math.max(px - tip.offsetWidth / 2, 0), box.width - tip.offsetWidth) + 'px';
+        });
+        wrap.addEventListener('mouseleave', function () {
+            line.setAttribute('visibility', 'hidden'); if (dot) dot.setAttribute('visibility', 'hidden'); tip.hidden = true;
+        });
+    });
+</script>
+</body>
+</html>

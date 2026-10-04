@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - XAVI{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="section" style="margin-top:6px">Profile</div>
+<div class="note">Make it yours. Amounts are shown in GBP.</div>
+<form method="POST" action="{{ url_for('settings_profile') }}" class="card">
+    {{ csrf_input() }}
+    <div class="form-row cols-3">
+        <div><label for="display_name">Display name</label>
+             <input type="text" id="display_name" name="display_name" maxlength="40" value="{{ cfg.display_name }}"></div>
+        <div><label for="account_label">Account label</label>
+             <input type="text" id="account_label" name="account_label" maxlength="20" value="{{ cfg.account_label }}"></div>
+        <div><label for="timezone">Timezone</label>
+             <select id="timezone" name="timezone">{% for z in zones %}<option value="{{ z }}" {{ 'selected' if z == cfg.timezone }}>{{ z }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="form-row cols-2">
+        <div><label for="isa_allowance">Yearly allowance £</label>
+             <input type="number" id="isa_allowance" name="isa_allowance" min="1" step="0.01" value="{{ cfg.isa_allowance }}"></div>
+        <div><label for="tax_year_end">Tax year ends</label>
+             <input type="text" id="tax_year_end" name="tax_year_end" maxlength="20" value="{{ cfg.tax_year_end }}"></div>
+    </div>
+    <div class="note">The account label (S&amp;S ISA, SIPP, GIA ...) is shown in the header. The UK ISA allowance is £20,000.</div>
+    <button type="submit" class="btn btn-primary">Save profile</button>
+</form>
+
+<div class="section">Cash &amp; allowance</div>
+<form method="POST" action="{{ url_for('settings_cash') }}" class="card">
+    {{ csrf_input() }}
+    <div class="form-row cols-2">
+        <div><label for="cash">Cash in account £</label>
+             <input type="number" id="cash" name="cash" min="0" step="0.01" value="{{ '%.2f' % cfg.cash }}"></div>
+        <div><label for="isa_used">Allowance used £</label>
+             <input type="number" id="isa_used" name="isa_used" min="0" step="0.01" value="{{ '%.2f' % cfg.isa_used }}"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>
+
+<div class="section">News &amp; data keys (optional)</div>
+<div class="note">Stored only in your own account folder. A SEC contact email adds official filings for US companies (the SEC requires it).</div>
+<form method="POST" action="{{ url_for('settings_keys') }}" class="card">
+    {{ csrf_input() }}
+    <div class="form-row cols-3">
+        <div><label for="newsapi">NewsAPI key</label><input type="password" id="newsapi" name="newsapi" autocomplete="off" value="{{ cfg.api_keys.newsapi }}"></div>
+        <div><label for="finnhub">Finnhub key</label><input type="password" id="finnhub" name="finnhub" autocomplete="off" value="{{ cfg.api_keys.finnhub }}"></div>
+        <div><label for="sec_contact">SEC contact email</label><input type="text" id="sec_contact" name="sec_contact" value="{{ cfg.sec_contact }}"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Save keys</button>
+</form>
+
+<div class="section">Your data</div>
+<div class="note">Backups don't include your keys and aren't encrypted: keep them somewhere safe.</div>
+<div class="card" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center">
+    <a class="btn" href="{{ url_for('export_backup') }}">Download backup (JSON)</a>
+    <a class="btn" href="{{ url_for('export_csv', kind='holdings') }}">Holdings (CSV)</a>
+    <a class="btn" href="{{ url_for('export_csv', kind='transactions') }}">Transactions (CSV)</a>
+    <a class="btn" href="{{ url_for('export_csv', kind='exposure') }}">Exposure (CSV)</a>
+</div>
+<form method="POST" action="{{ url_for('settings_reset') }}" class="card" style="margin-top:14px"
+      onsubmit="return confirm('Remove ALL holdings and transactions and set cash and allowance used to £0?');">
+    {{ csrf_input() }}
+    <div class="form-row cols-2">
+        <div><label for="reset_confirm">Reset everything to zero: type RESET</label>
+             <input type="text" id="reset_confirm" name="confirm" autocomplete="off"></div>
+        <div style="align-self:end"><button type="submit" class="btn btn-danger">Reset to zero</button></div>
+    </div>
+    <div class="note">Removes all holdings and transactions. Your account and settings stay.</div>
+</form>
+
+<div class="section">Password &amp; account</div>
+<div class="note">There is no password recovery.</div>
+<form method="POST" action="{{ url_for('settings_password') }}" class="card">
+    {{ csrf_input() }}
+    <div class="form-row cols-3">
+        <div><label for="old_password">Current password</label><input type="password" id="old_password" name="old_password" required autocomplete="current-password"></div>
+        <div><label for="new_password">New password (at least 8 characters)</label><input type="password" id="new_password" name="new_password" required minlength="8" autocomplete="new-password"></div>
+        <div><label for="new_password2">Repeat new password</label><input type="password" id="new_password2" name="new_password2" required autocomplete="new-password"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Change password</button>
+</form>
+<form method="POST" action="{{ url_for('settings_delete') }}" class="card" style="margin-top:14px"
+      onsubmit="return confirm('Permanently delete your account and all of its data? This cannot be undone.');">
+    {{ csrf_input() }}
+    <div class="form-row cols-3">
+        <div><label for="del_pw">Password</label><input type="password" id="del_pw" name="password" required autocomplete="current-password"></div>
+        <div><label for="del_confirm">Type DELETE to confirm</label><input type="text" id="del_confirm" name="confirm" autocomplete="off"></div>
+        <div style="align-self:end"><button type="submit" class="btn btn-danger">Delete my account</button></div>
+    </div>
+    <div class="note">Permanently deletes this account and all of its data. It can't be recovered.</div>
+</form>
+{% endblock %}

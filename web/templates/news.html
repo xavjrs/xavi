@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}News - XAVI{% endblock %}
+{% block page_title %}News feed{% endblock %}
+
+{% block content %}
+{% if not has_holdings %}
+<div class="empty">Add a holding on the Dashboard to see news about it.</div>
+{% else %}
+<div class="filters">
+    <div>
+        <div class="filter-label">Importance</div>
+        <div class="chips">
+            {% for key, label in levels.items() %}
+            <a class="chip {{ 'on' if key == level }}" href="{{ url_for('news', min=key, ticker=ticker, sort=sort, opinion=1 if show_opinion else 0) }}">{{ label }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    <div>
+        <div class="filter-label">Holding</div>
+        <div class="chips">
+            <a class="chip {{ 'on' if not ticker }}" href="{{ url_for('news', min=level, sort=sort, opinion=1 if show_opinion else 0) }}">All</a>
+            {% for t in tickers %}
+            <a class="chip {{ 'on' if t == ticker }}" href="{{ url_for('news', min=level, ticker=t, sort=sort, opinion=1 if show_opinion else 0) }}">{{ t }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    <div>
+        <div class="filter-label">Sort</div>
+        <div class="chips">
+            <a class="chip {{ 'on' if sort == 'important' }}" href="{{ url_for('news', min=level, ticker=ticker, sort='important', opinion=1 if show_opinion else 0) }}">Most important</a>
+            <a class="chip {{ 'on' if sort == 'new' }}" href="{{ url_for('news', min=level, ticker=ticker, sort='new', opinion=1 if show_opinion else 0) }}">Newest</a>
+        </div>
+    </div>
+    <div>
+        <div class="filter-label">Opinion &amp; stock-tip sites</div>
+        <div class="chips">
+            <a class="chip {{ 'on' if not show_opinion }}" href="{{ url_for('news', min=level, ticker=ticker, sort=sort, opinion=0) }}">Hidden</a>
+            <a class="chip {{ 'on' if show_opinion }}" href="{{ url_for('news', min=level, ticker=ticker, sort=sort, opinion=1) }}">Shown</a>
+        </div>
+    </div>
+</div>
+
+{% if note %}<div class="warn">{{ note }}</div>{% endif %}
+<div class="note">Updated {{ updated }} · {{ total }} stories · Sources: Google News (Reuters, BBC, FT, CNBC and others), Yahoo Finance ·
+    <a href="{{ url_for('news', refresh=1, min=level, ticker=ticker, sort=sort, opinion=1 if show_opinion else 0) }}">Refresh news</a><br>
+    Only stories that name the company are shown; the same story from several outlets is grouped. Importance (1-5)
+    is a keyword-and-source score, not a view on what a story means for prices.</div>
+
+{% for item in items %}
+<article class="story">
+    <div class="story-head">
+        <span class="score s{{ item.score }}">{{ item.score }}/5 {{ score_name[item.score] }}</span>
+        <span class="muted">{{ item.when }}</span>
+        <span class="ticker-tag">{{ item.ticker }}</span>
+        {% if kind_label[item.get('kind', 'news')] %}<span class="badge">{{ kind_label[item.get('kind', 'news')] }}</span>{% endif %}
+    </div>
+    <div class="story-title">
+        {% if item.safe_url %}<a href="{{ item.safe_url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+    </div>
+    <div class="story-meta">
+        <span class="flag">Flagged for: {{ item.flags|join(', ') if item.flags else 'no key terms' }}</span>
+        <span class="muted">{{ item.source }}{% if item.also %} · also: {{ item.also[:4]|join(', ') }}{% endif %}</span>
+    </div>
+</article>
+{% else %}
+<div class="empty">No stories match this filter.</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

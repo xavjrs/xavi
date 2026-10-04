@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tile, hbar, money %}
+
+{% block title %}Dashboard - XAVI{% endblock %}
+{% block page_title %}Portfolio overview{% endblock %}
+
+{% block content %}
+<div class="refresh-line">
+    Prices as of {{ price_time }} · Yahoo Finance, delayed, cached up to 60 minutes ·
+    <a href="{{ url_for('dashboard', refresh=1, range=rng, metric=metric) }}">Refresh prices</a>
+</div>
+{% if stale %}<div class="warn">Some prices could not be refreshed and may be out of date (marked "stale" below).</div>{% endif %}
+
+<div class="tiles">
+    {{ tile("Total value", money(m.total), "incl. cash") }}
+    {{ tile("Invested", money(m.invested), "cost basis") }}
+    {{ tile("Unrealised", money(m.pl, True), ('%+.2f%%' % m.pl_pct) if m.pl_pct is not none else '—', 'pos' if m.pl > 0 else ('neg' if m.pl < 0 else '')) }}
+    {{ tile("Realised", money(m.realised_pl, True), "from sales", 'pos' if m.realised_pl > 0 else ('neg' if m.realised_pl < 0 else '')) }}
+    {{ tile("Cash", money(m.cash), '%.1f%%' % m.cash_weight) }}
+    {{ tile("Spread", score|round|int, ('Well spread' if score >= 70 else ('Moderately spread' if score >= 50 else 'Concentrated')) if rows else '—', unit="/100") }}
+</div>
+
+<div class="two-col">
+    <div>
+        <div class="section">Returns over time</div>
+        <div class="note">Built from your dated buys and sells. Shares with no buy date count as held from the start.</div>
+        <div class="chip-row">
+            <div class="chips">
+                {% for r in ranges %}<a class="chip {{ 'on' if r == rng }}" href="{{ url_for('dashboard', range=r, metric=metric) }}">{{ r }}</a>{% endfor %}
+            </div>
+            <div class="chips">
+                {% for key, label in (('value', 'Value'), ('profit', 'Profit'), ('return', 'Return %')) %}
+                <a class="chip {{ 'on' if key == metric }}" href="{{ url_for('dashboard', range=rng, metric=key) }}">{{ label }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        {% if chart_svg %}
+            {{ chart_svg }}
+            <div>
+                {% if metric == 'return' %}
+                <span class="pill">Highest <b>{{ '%+.2f%%' % pills.hi }}</b> · {{ fmt_date(pills.hi_date) }}</span>
+                <span class="pill">Lowest <b>{{ '%+.2f%%' % pills.lo }}</b> · {{ fmt_date(pills.lo_date) }}</span>
+                {% else %}
+                <span class="pill">Highest <b>{{ money(pills.hi, metric == 'profit') }}</b> · {{ fmt_date(pills.hi_date) }}</span>
+                <span class="pill">Lowest <b>{{ money(pills.lo, metric == 'profit') }}</b> · {{ fmt_date(pills.lo_date) }}</span>
+                {% endif %}
+                <span class="pill">Profit now <b>{{ money(timeline.profit[-1], True) }}</b> ({{ '%+.2f%%' % timeline.return_pct[-1] }})</span>
+                <span class="pill">Net invested <b>{{ money(timeline.invested[-1]) }}</b></span>
+            </div>
+            <div class="note">Return % = total profit (realised + unrealised) / everything bought so far.
+                {% if metric == 'value' %}Dashed line = net money in. {% endif %}Starts from your first dated purchase.
+                {% if timeline.skipped %}<br>Not included (no price history): {{ timeline.skipped|join(', ') }}.{% endif %}</div>
+        {% elif rows or has_ledger %}
+            <div class="empty">Price history isn't available right now. Try again in a moment.</div>
+        {% else %}
+            <div class="empty">Add a position (with its buy date) or a closed trade to see your returns.</div>
+        {% endif %}
+    </div>
+    <div>
+        <div class="section">Progress</div>
+        {{ hbar("Allowance used", m.isa_used_pct, '%.1f%%' % m.isa_used_pct, 'blue') }}
+        {{ hbar("Cash share of total", m.cash_weight, '%.1f%%' % m.cash_weight, 'accent') }}
+        {{ hbar("Largest holding", largest, '%.1f%% of holdings' % largest, 'red' if largest > 40 else 'green') }}
+
+        {% if rows %}
+        <div class="section">Performance by holding</div>
+        <div class="note">Profit / loss % on cost</div>
+        {% set biggest = rows | map(attribute='pl_pct') | map('abs') | max %}
+        {% for r in rows %}
+            {{ hbar(r.ticker, ((r.pl_pct or 0) | abs) / (biggest or 1) * 100, '%+.1f%%' % (r.pl_pct or 0), 'green' if (r.pl_pct or 0) >= 0 else 'red') }}
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+
+<div class="section">Holdings</div>
+<div class="note">Costs and prices are in £ per share. Weights are % of total value including cash. Sector and region are labels you can edit.</div>
+{% if rows %}
+<div class="table-wrap">
+    <table class="data">
+        <thead>
+            <tr>
+                <th>Holding</th><th class="num">Shares</th><th class="num">Avg cost £</th>
+                <th class="num">Price £</th><th class="num">Value £</th><th class="num">P/L £</th>
+                <th class="num">P/L %</th><th class="num">Weight %</th><th>Data</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td><span class="ticker">{{ r.ticker }}</span><br><span class="sub">{{ r.name }} · {{ r.sector }} · {{ r.region }}</span></td>
+                <td class="num">{{ '{:,.4g}'.format(r.shares) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(r.avg_cost) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(r.price) if not r.no_price else '—' }}</td>
+                <td class="num">{{ '{:,.2f}'.format(r.value) }}</td>
+                <td class="num {{ 'pos' if r.pl > 0 else ('neg' if r.pl < 0 else '') }}">{{ '%+.2f' % r.pl }}</td>
+                <td class="num {{ 'pos' if (r.pl_pct or 0) > 0 else ('neg' if (r.pl_pct or 0) < 0 else '') }}">{{ ('%+.2f%%' % r.pl_pct) if r.pl_pct is not none else '—' }}</td>
+                <td class="num">{{ '%.1f%%' % r.weight }}</td>
+                <td>{% if r.stale %}<span class="badge badge-warn">stale</span>{% else %}<span class="badge">live</span>{% endif %}</td>
+                <td class="num actions">
+                    <button type="button" class="btn btn-small" data-edit
+                        data-ticker="{{ r.ticker }}" data-name="{{ r.name }}" data-shares="{{ r.shares }}"
+                        data-avg="{{ '%.4f' % r.avg_cost }}" data-sector="{{ r.sector }}" data-region="{{ r.region }}">Edit</button>
+                    <button type="button" class="btn btn-small" data-sell data-ticker="{{ r.ticker }}" data-shares="{{ r.shares }}">Sell</button>
+                    <form method="POST" action="{{ url_for('holdings_remove', ticker=r.ticker) }}" style="display:inline"
+                          onsubmit="return confirm('Remove {{ r.ticker }} from the tracker? Cash is not changed.');">
+                        {{ csrf_input() }}<button class="btn btn-small btn-danger" type="submit">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty">Your account is empty. Add your first position below, then set your cash and yearly allowance.</div>
+{% endif %}
+
+{% if closed %}
+<div class="section">Closed positions</div>
+<div class="note">Every sale: when it was opened and closed, and the return.</div>
+<div class="table-wrap">
+    <table class="data">
+        <thead><tr><th>Ticker</th><th>Opened</th><th>Closed</th><th class="num">Days</th><th class="num">Shares</th>
+            <th class="num">Cost £</th><th class="num">Proceeds £</th><th class="num">Profit £</th><th class="num">Return</th></tr></thead>
+        <tbody>
+        {% for c in closed[:12] %}
+            <tr><td class="ticker">{{ c.ticker }}</td><td>{{ c.opened or '—' }}</td><td>{{ c.closed }}</td>
+                <td class="num">{{ c.days if c.days is not none else '—' }}</td><td class="num">{{ '{:,.4g}'.format(c.shares) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(c.cost) }}</td><td class="num">{{ '{:,.2f}'.format(c.proceeds) }}</td>
+                <td class="num {{ 'pos' if c.profit > 0 else ('neg' if c.profit < 0 else '') }}">{{ '%+.2f' % c.profit }}</td>
+                <td class="num {{ 'pos' if (c.return_pct or 0) > 0 else ('neg' if (c.return_pct or 0) < 0 else '') }}">{{ ('%+.2f%%' % c.return_pct) if c.return_pct is not none else '—' }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="note"><a href="{{ url_for('history') }}">All transactions and closed trades →</a></div>
+{% endif %}
+
+<div class="section">Add position</div>
+<div class="note">Enter what you actually paid, and the date, so cost, P&amp;L and your returns chart are exact.
+    For a trade you've already sold, use <a href="{{ url_for('history') }}">Add closed trade</a> on the History page.</div>
+<form id="add-form" class="card" data-csrf="{{ csrf_token() }}" onsubmit="return addHolding(event)">
+    <div class="form-row cols-4">
+        <div><label for="a-ticker">Ticker</label>
+             <input type="text" id="a-ticker" required pattern="[A-Za-z0-9.\-]{1,10}" placeholder="e.g. AZN.L, BP.L, AAPL"></div>
+        <div><label for="a-shares">Shares</label>
+             <input type="number" id="a-shares" required min="0.0001" step="any"></div>
+        <div><label for="a-price">Price paid per share</label>
+             <input type="number" id="a-price" required min="0.0001" step="any"></div>
+        <div><label for="a-ccy">Price currency</label>
+             <select id="a-ccy" onchange="document.getElementById('a-fx-wrap').hidden = this.value !== 'USD'">
+                <option value="GBP">£ pounds</option><option value="GBp">p pence</option><option value="USD">$ US dollars</option></select></div>
+    </div>
+    <div class="form-row cols-4">
+        <div id="a-fx-wrap" hidden><label for="a-fx">Dollars per £1 when bought</label>
+             <input type="number" id="a-fx" min="0" step="any" placeholder="blank = today's rate"></div>
+        <div><label for="a-fees">Fees £</label><input type="number" id="a-fees" min="0" step="any" value="0"></div>
+        <div><label for="a-date">Date bought (puts it on the chart)</label>
+             <input type="date" id="a-date" max="{{ now.strftime('%Y-%m-%d') }}"></div>
+        <div><label for="a-notes">Notes (optional)</label><input type="text" id="a-notes" maxlength="200"></div>
+    </div>
+    <div class="form-row cols-3">
+        <div><label for="a-sector">Sector (optional, filled in from Yahoo)</label><input type="text" id="a-sector"></div>
+        <div><label for="a-region">Region (optional)</label><input type="text" id="a-region"></div>
+        <div style="align-self:end"><label class="check"><input type="checkbox" id="a-cash" checked> Pay from my cash balance</label></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Add position</button>
+</form>
+
+<div class="two-col">
+    <div>
+        {% if rows %}
+        <div class="section">Allocation by holding</div>
+        <div class="note">% of total value including cash</div>
+        {% for r in rows %}{{ hbar(r.ticker, r.weight, '%.1f%%' % r.weight, 'accent') }}{% endfor %}
+        {{ hbar('Cash', m.cash_weight, '%.1f%%' % m.cash_weight, 'blue') }}
+        {% endif %}
+    </div>
+    <div>
+        <div class="section">Cash &amp; allowance</div>
+        <form method="POST" action="{{ url_for('settings_cash') }}" class="card">
+            {{ csrf_input() }}<input type="hidden" name="next" value="dashboard">
+            <div class="form-row cols-2">
+                <div><label for="c-cash">Cash in account £</label>
+                     <input type="number" id="c-cash" name="cash" min="0" step="0.01" value="{{ '%.2f' % m.cash }}"></div>
+                <div><label for="c-used">Allowance used £</label>
+                     <input type="number" id="c-used" name="isa_used" min="0" step="0.01" value="{{ '%.2f' % m.isa_used }}"></div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+        <div class="note" style="margin-top:10px">Allowance £{{ '{:,.0f}'.format(m.isa_allowance) }} · used {{ money(m.isa_used) }}
+            ({{ '%.1f' % m.isa_used_pct }}%) · remaining {{ money(m.isa_remaining) }}. Investing cash already inside the ISA
+            doesn't use allowance; new deposits do.</div>
+    </div>
+</div>
+
+<!-- Edit dialog -->
+<dialog id="edit-dialog">
+    <form method="POST" id="edit-form" class="dialog-body">
+        {{ csrf_input() }}
+        <h2 id="edit-title">Edit holding</h2>
+        <div class="note">Changing shares or average cost resets the FIFO lots to one lot at the new numbers.</div>
+        <div class="form-row cols-2">
+            <div><label>Shares</label><input type="number" name="shares" id="e-shares" min="0.0001" step="any" required></div>
+            <div><label>Average cost £ per share</label><input type="number" name="avg_cost" id="e-avg" min="0.0001" step="any" required></div>
+        </div>
+        <div class="form-row cols-3">
+            <div><label>Name</label><input type="text" name="name" id="e-name"></div>
+            <div><label>Sector</label><input type="text" name="sector" id="e-sector"></div>
+            <div><label>Region</label><input type="text" name="region" id="e-region"></div>
+        </div>
+        <div class="form-row"><div><label>Notes</label><input type="text" name="notes" maxlength="200"></div></div>
+        <div class="dialog-actions">
+            <button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Sell dialog -->
+<dialog id="sell-dialog">
+    <form method="POST" id="sell-form" class="dialog-body">
+        {{ csrf_input() }}
+        <h2 id="sell-title">Sell shares</h2>
+        <div class="note">Sales use FIFO (oldest shares first). Leave the price blank to use today's price.</div>
+        <div class="form-row cols-3">
+            <div><label>Shares to sell</label><input type="number" name="shares" id="s-shares" min="0.0001" step="any" required></div>
+            <div><label>Sale price per share</label><input type="number" name="price" min="0" step="any" placeholder="live price"></div>
+            <div><label>Price currency</label><select name="currency"><option value="GBP">£ pounds</option><option value="GBp">p pence</option><option value="USD">$ US dollars</option></select></div>
+        </div>
+        <div class="form-row cols-3">
+            <div><label>Fees £</label><input type="number" name="fees" min="0" step="any" value="0"></div>
+            <div><label>Date sold</label><input type="date" name="date" max="{{ now.strftime('%Y-%m-%d') }}"></div>
+            <div><label>Proceeds</label><select name="cash"><option value="auto">Add to cash</option><option value="manual">I'll update cash myself</option></select></div>
+        </div>
+        <div class="form-row"><div><label>Notes</label><input type="text" name="notes" maxlength="200"></div></div>
+        <div class="dialog-actions">
+            <button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Record sale</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+    async function addHolding(event, force) {
+        event.preventDefault();
+        var form = document.getElementById('add-form');
+        var val = function (id) { return document.getElementById(id).value; };
+        var body = {
+            ticker: val('a-ticker').trim().toUpperCase(), shares: val('a-shares'), price: val('a-price'),
+            currency: val('a-ccy'), fx: val('a-fx'), fees: val('a-fees'), bought: val('a-date'),
+            notes: val('a-notes').trim(), sector: val('a-sector').trim(), region: val('a-region').trim(),
+            pay_cash: document.getElementById('a-cash').checked, allow_unlisted: !!force
+        };
+        try {
+            var response = await fetch('{{ url_for("holdings_add") }}', {
+                method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': form.dataset.csrf},
+                body: JSON.stringify(body)
+            });
+            var data = await response.json();
+            if (data.success) { window.location.href = '{{ url_for("dashboard") }}'; return false; }
+            if (data.can_force && confirm(data.error + '\n\nAdd it anyway, without live data?')) { return addHolding(event, true); }
+            if (!data.can_force) { alert(data.error || 'Could not add the position.'); }
+        } catch (error) { alert('Error: ' + error.message); }
+        return false;
+    }
+
+    document.querySelectorAll('[data-edit]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var d = b.dataset;
+            document.getElementById('edit-title').textContent = 'Edit ' + d.ticker;
+            document.getElementById('edit-form').action = '/holdings/' + encodeURIComponent(d.ticker) + '/edit';
+            document.getElementById('e-shares').value = d.shares; document.getElementById('e-avg').value = d.avg;
+            document.getElementById('e-name').value = d.name; document.getElementById('e-sector').value = d.sector;
+            document.getElementById('e-region').value = d.region;
+            document.getElementById('edit-dialog').showModal();
+        });
+    });
+    document.querySelectorAll('[data-sell]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var d = b.dataset;
+            document.getElementById('sell-title').textContent = 'Sell ' + d.ticker;
+            document.getElementById('sell-form').action = '/holdings/' + encodeURIComponent(d.ticker) + '/sell';
+            document.getElementById('s-shares').value = d.shares; document.getElementById('s-shares').max = d.shares;
+            document.getElementById('sell-dialog').showModal();
+        });
+    });
+</script>
+{% endblock %}

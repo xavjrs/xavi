@@ -14,6 +14,19 @@ Information only - it never tells you to buy, sell or hold anything.
 
 Both versions use the same accounts and the same data.
 
+### Flask web app (`web/`)
+
+The same dashboard as a Flask app with server-drawn charts and a light/dark switch.
+
+1. `pip install -r requirements.txt`
+2. Double-click **start_web.bat**, or run `python web/app.py`, then open http://127.0.0.1:5000
+3. Create an account. Your data stays on your machine, in `web/portfolio_data/`.
+
+Optional environment variables: `XAVI_DATA_DIR` (where accounts are stored), `XAVI_NO_DEMO=1`
+(don't create the local `test` demo account), `XAVI_DEBUG=1` (Flask debug mode),
+`XAVI_SECRET_KEY` (session key; otherwise one is generated and kept locally).
+The demo account is for local testing only. Do not expose this app to the internet.
+
 ## Pages (web app)
 
 Use the left sidebar. **Dashboard** (value, balance-over-time chart, allowance and

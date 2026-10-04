@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Create account - XAVI{% endblock %}
+
+{% block auth_content %}
+<div class="auth-card">
+    <div class="auth-tabs">
+        <a href="{{ url_for('login') }}">Log in</a>
+        <a class="on" href="{{ url_for('signup') }}">Create account</a>
+    </div>
+    <form method="POST">
+        {{ csrf_input() }}
+        <div class="form-row">
+            <div>
+                <label for="display_name">Display name (optional)</label>
+                <input type="text" id="display_name" name="display_name" maxlength="40">
+            </div>
+        </div>
+        <div class="form-row">
+            <div>
+                <label for="username">Choose a username</label>
+                <input type="text" id="username" name="username" required minlength="3" maxlength="20"
+                       pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,19}" autocomplete="username"
+                       title="3-20 characters: letters, numbers, . _ -">
+            </div>
+        </div>
+        <div class="form-row">
+            <div>
+                <label for="password">Choose a password (at least 8 characters)</label>
+                <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password">
+            </div>
+        </div>
+        <div class="form-row">
+            <div>
+                <label for="password_confirm">Repeat password</label>
+                <input type="password" id="password_confirm" name="password_confirm" required autocomplete="new-password">
+            </div>
+        </div>
+        <div class="warn">{{ no_recovery }}</div>
+        <label class="check"><input type="checkbox" name="understood" value="1" required>
+            I understand there is no password recovery</label>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px">Create account</button>
+    </form>
+</div>
+{% endblock %}

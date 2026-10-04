@@ -1,0 +1,49 @@
+{# Shared building blocks. Import with:  {% from "_macros.html" import tile, hbar, money, wordmark %} #}
+
+{% macro wordmark(height=24) -%}
+<svg viewBox="-6 -6 298 82" height="{{ height }}" role="img" aria-label="XAVI"
+     style="color:var(--text-strong);display:inline-block;vertical-align:middle">
+  <g fill="none" stroke="currentColor" stroke-width="8" stroke-miterlimit="10">
+    <path d="M0 0 L66 70 M66 0 L0 70"/><path d="M96 70 L131 0 L166 70"/>
+    <path d="M184 0 L219 70 L254 0"/><path d="M285 0 V70"/>
+  </g>
+</svg>
+{%- endmacro %}
+
+{% macro money(value, signed=False) -%}
+{%- if value < 0 -%}-{%- elif signed -%}+{%- endif -%}£{{ '{:,.2f}'.format(value|abs) }}
+{%- endmacro %}
+
+{% macro tile(label, value, sub="", tone="", unit="") -%}
+<div class="tile">
+  <div class="label">{{ label }}</div>
+  <div class="value {{ tone }}">{{ value }}{% if unit %}<span class="unit">{{ unit }}</span>{% endif %}</div>
+  <div class="sub">{{ sub }}</div>
+</div>
+{%- endmacro %}
+
+{# colour is one of: accent, green, red, blue #}
+{% macro hbar(label, pct, text, colour="accent") -%}
+<div class="hbar">
+  <div class="hbar-top"><span>{{ label }}</span><span>{{ text }}</span></div>
+  <div class="hbar-track">
+    <div class="hbar-fill" style="width:{{ [[pct, 0]|max, 100]|min }}%;background:var(--{{ colour }})"></div>
+  </div>
+</div>
+{%- endmacro %}
+
+{# Light / dark switch. The script in base.html wires up the buttons. #}
+{% macro theme_switch() -%}
+<div class="theme-switch" role="group" aria-label="Colour theme">
+  <button type="button" data-theme-set="auto" aria-pressed="false">Auto</button>
+  <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+  <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+</div>
+{%- endmacro %}
+
+{# A <select>-style chip row built from links. items = [(label, url, is_active)] #}
+{% macro chips(items) -%}
+<div class="chips">
+  {% for label, url, on in items %}<a class="chip {{ 'on' if on }}" href="{{ url }}">{{ label }}</a>{% endfor %}
+</div>
+{%- endmacro %}

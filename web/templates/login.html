@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Log in - XAVI{% endblock %}
+
+{% block auth_content %}
+<div class="auth-card">
+    <div class="auth-tabs">
+        <a class="on" href="{{ url_for('login') }}">Log in</a>
+        <a href="{{ url_for('signup') }}">Create account</a>
+    </div>
+    <form method="POST">
+        {{ csrf_input() }}
+        <div class="form-row">
+            <div>
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autofocus autocomplete="username">
+            </div>
+        </div>
+        <div class="form-row">
+            <div>
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Log in</button>
+    </form>
+</div>
+{% endblock %}

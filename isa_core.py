@@ -759,6 +759,23 @@ SEC_ITEM_SCORE = {"1.03": 5, "4.02": 5, "2.02": 5, "2.01": 5, "3.01": 5, "1.01":
                   "2.05": 4, "5.02": 4, "5.07": 3, "7.01": 3, "8.01": 3}
 
 
+# A story needs at least one of these (money / markets / corporate-event words) to score above 2.
+# This stops product reviews and gadget news from ranking as important company news.
+FINANCE_WORDS = ["earnings", "results", "revenue", "profit", "loss", "sales", "shares", "stock",
+                 "investor", "investors", "analyst", "analysts", "market", "valuation", "guidance",
+                 "outlook", "forecast", "quarter", "quarterly", "dividend", "buyback", "price target",
+                 "rating", "downgrade", "upgrade", "debt", "bond", "lawsuit", "sues", "sued",
+                 "settlement", "antitrust", "regulator", "regulators", "fine", "fined", "probe",
+                 "investigation", "acquisition", "acquires", "acquire", "merger", "takeover", "deal",
+                 "ipo", "layoffs", "job cuts", "ceo", "chief executive", "cfo", "chairman", "tariff",
+                 "sanctions", "export controls", "ban", "bankruptcy", "recall", "contract", "stake",
+                 "billion", "million", "trillion", "capex", "margin", "cash flow", "output",
+                 "production", "oil", "gas", "refinery", "refining"]
+# 'upgrade' / 'downgrade' only mean an analyst rating change when one of these is nearby.
+RATING_CONTEXT = ["analyst", "analysts", "rating", "price target", "to buy", "to sell", "to hold",
+                  "overweight", "underweight", "outperform", "underperform", "neutral", "target"]
+
+
 def has_word(text, word):
     """True if `word` appears in text as a whole word / phrase (so 'ban' doesn't match 'bank')."""
     return re.search(r"(?<![a-z0-9])" + re.escape(word) + r"(?![a-z0-9])", text) is not None
@@ -807,11 +824,16 @@ def score_item(item):
         score = item.get("filing_score", 3)
     else:
         text = f"{item['title']} {item['summary']}".lower()
-        points = sum(2 for w in HIGH_WORDS if has_word(text, w)) + \
+        text = re.sub(r"fine[- ]tun\w*", " ", text)     # AI "fine-tuning" is not a regulatory fine
+        has_rating_context = any(has_word(text, w) for w in RATING_CONTEXT)
+        points = sum(2 for w in HIGH_WORDS
+                     if has_word(text, w) and (w not in ("upgrade", "downgrade") or has_rating_context)) + \
             sum(1 for w in MEDIUM_WORDS if has_word(text, w))
         score = 1 + min(points, 3)
         if item["tier"] == 1:
             score += 1
+        if not any(has_word(text, w) for w in FINANCE_WORDS):
+            score = min(score, 2)           # no money / market / corporate-event words at all
         if item["kind"] == "opinion":
             score = min(score, 2)
         elif item["kind"] in ("press_release", "company"):

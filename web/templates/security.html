@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tile, money %}
+
+{% block title %}{{ ticker or 'Security' }} - XAVI{% endblock %}
+{% block page_title %}Security research{% endblock %}
+
+{% block content %}
+<form method="get" action="{{ url_for('security') }}" class="inline-form">
+    <input type="text" name="ticker" value="{{ ticker }}" placeholder="Search any ticker  (AAPL, BP.L)"
+           pattern="[A-Za-z0-9.\-]{1,10}" aria-label="Ticker" style="max-width:300px">
+    {% if held_tickers %}
+    <span class="muted">Your holdings:</span>
+    {% for t in held_tickers %}<a class="chip {{ 'on' if t == ticker }}" href="{{ url_for('security', ticker=t, range=rng) }}">{{ t }}</a>{% endfor %}
+    {% endif %}
+    <button class="btn btn-primary" type="submit">Look up</button>
+</form>
+
+{% if not ticker %}
+<div class="empty">Search for any ticker above (for example AAPL or BP.L), or add a holding on the Dashboard.</div>
+{% elif error %}
+<div class="alert alert-error">{{ error }}</div>
+{% else %}
+<div class="sec-title">{{ info.get('longName') or (holding.name if holding else ticker) }}
+    <span class="meta" style="margin-left:10px">{{ info.get('fullExchangeName') or '' }} · {{ ticker }}</span></div>
+<div class="sec-row">
+    {% if last is not none %}
+    <div><span class="px">{{ symbol }}{{ '{:,.2f}'.format(last) }}</span><span class="ccy">{{ ccy }}</span>
+        {% if change is not none %}<span class="{{ 'pos' if change >= 0 else 'neg' }}">{{ '%+.2f' % change }} ({{ '%+.2f%%' % change_pct }})</span>{% endif %}
+        <div class="k">Last close · {{ fmt_date(last_date) }}</div></div>
+    {% endif %}
+    <div><div class="v">{{ fmt_date(earnings[0]) if earnings else '—' }}</div><div class="k">Next earnings date</div></div>
+    <div><div class="v">{{ info.get('sector') or '—' }}</div><div class="k">Sector</div></div>
+    <div><div class="v">{{ info.get('industry') or '—' }}</div><div class="k">Industry</div></div>
+</div>
+
+<div class="chips" style="margin-top:16px">
+    {% for r in ranges %}<a class="chip {{ 'on' if r == rng }}" href="{{ url_for('security', ticker=ticker, range=r) }}">{{ r }}</a>{% endfor %}
+</div>
+
+{% if charts %}
+    <div class="chart-title">Price</div>{{ charts.price }}
+    <div class="chart-title">Volume</div>{{ charts.volume }}
+    <div class="chart-title">Drawdown % from peak</div>{{ charts.drawdown }}
+{% else %}
+    <div class="empty">Price history isn't available for this range right now.</div>
+{% endif %}
+
+<div class="tiles" style="grid-template-columns: repeat(6, 1fr); margin-top:22px">
+    {{ tile("Market cap", human(info.marketCap) if info.get('marketCap') else '—', info.get('currency') or '') }}
+    {{ tile("P/E", '%.1f' % info.trailingPE if info.get('trailingPE') else '—', "trailing") }}
+    {{ tile("Forward P/E", '%.1f' % info.forwardPE if info.get('forwardPE') else '—', "expected") }}
+    {{ tile("Beta", '%.2f' % info.beta if info.get('beta') else '—', "market = 1.00") }}
+    {{ tile("Dividend yield", ('%.2f%%' % dividend) if dividend else '—', "annual rate / price") }}
+    {% if held %}
+    {{ tile("Your position", money(held.value), ('%+.2f%%' % held.pl_pct) if held.pl_pct is not none else '', 'pos' if (held.pl_pct or 0) > 0 else ('neg' if (held.pl_pct or 0) < 0 else '')) }}
+    {% else %}
+    {{ tile("Your position", '—', "not held") }}
+    {% endif %}
+</div>
+
+{% if low and high and rng_pos is not none %}
+<div class="hbar" style="margin-top:20px">
+    <div class="hbar-top"><span>52-week range</span><span>{{ symbol }}{{ '{:,.2f}'.format(low) }} - {{ symbol }}{{ '{:,.2f}'.format(high) }} {{ ccy }}</span></div>
+    <div class="hbar-track"><div class="hbar-fill" style="width:{{ rng_pos }}%;background:var(--accent)"></div></div>
+</div>
+{% endif %}
+
+<div class="section">Analyst consensus &amp; notes</div>
+<div class="note">Source: Yahoo Finance. Not a recommendation.</div>
+<ul class="facts">
+    {% set key = info.get('recommendationKey') %}
+    <li><b>Analyst consensus (Yahoo Finance):</b>
+        {{ key.replace('_', ' ').upper() if key and key != 'none' else 'no coverage found' }}
+        {% if info.get('numberOfAnalystOpinions') %} from {{ info.numberOfAnalystOpinions }} analysts{% endif %}
+        {% if info.get('targetMeanPrice') %}; mean target {{ '{:,.2f}'.format(info.targetMeanPrice * scale) }} {{ ccy }}{% endif %}</li>
+    {% if holding %}<li><b>Your notes:</b> {{ holding.notes or '—' }}</li>{% endif %}
+</ul>
+{% endif %}
+{% endblock %}
