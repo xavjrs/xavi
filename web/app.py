@@ -638,6 +638,24 @@ def diag():
     attempt("insights", lambda: (lambda r: [r.status_code, (r.json().get("finance", {}).get("result") or {}).get("recommendation")])(
         rq.get("https://query1.finance.yahoo.com/ws/insights/v1/finance/insights", params={"symbol": "AAPL"}, headers=ua, timeout=10)))
     attempt("server_ip_country", lambda: rq.get("https://ipinfo.io/json", timeout=8).json().get("country"))
+
+    def crumb_flow(session, label):
+        session.get("https://fc.yahoo.com", headers=ua, timeout=10)
+        got = session.get("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=ua, timeout=10)
+        steps = {"cookies": sorted(c.name for c in session.cookies) if hasattr(session.cookies, "__iter__") else "?",
+                 "getcrumb": [got.status_code, got.text[:30]]}
+        if got.status_code == 200 and got.text and "<" not in got.text:
+            qs = session.get("https://query1.finance.yahoo.com/v10/finance/quoteSummary/AAPL",
+                             params={"modules": "recommendationTrend,financialData", "crumb": got.text},
+                             headers=ua, timeout=12)
+            steps["quoteSummary"] = [qs.status_code, qs.text[:120]]
+        return steps
+
+    attempt("crumb_requests_session", lambda: crumb_flow(rq.Session(), "requests"))
+    attempt("crumb_curl_cffi", lambda: crumb_flow(__import__("curl_cffi.requests", fromlist=["Session"]).Session(impersonate="chrome"), "curl"))
+    attempt("nasdaq_analyst", lambda: (lambda r: [r.status_code, r.text[:200]])(
+        rq.get("https://api.nasdaq.com/api/analyst/AAPL/ratings", headers={**ua, "Accept": "application/json, text/plain, */*",
+                                                                          "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/"}, timeout=12)))
     return jsonify(out)
 
 
