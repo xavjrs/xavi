@@ -490,6 +490,48 @@ def _analyst_counts(state, ticker):
     return counts
 
 
+NASDAQ_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/124.0 Safari/537.36",
+                  "Accept": "application/json, text/plain, */*", "Origin": "https://www.nasdaq.com",
+                  "Referer": "https://www.nasdaq.com/"}
+_NASDAQ_SCORE = {"strong buy": 1.0, "buy": 2.0, "hold": 3.0, "neutral": 3.0, "sell": 4.0, "strong sell": 5.0}
+
+
+def nasdaq_analyst(state, ticker):
+    """Analyst consensus for a US-listed ticker from Nasdaq.com's public data (works when Yahoo's
+    session-key calls are blocked, e.g. on cloud hosts). None for UK/other tickers or if unavailable."""
+    if not re.fullmatch(r"[A-Za-z]{1,5}", ticker):
+        return None
+    store = state["cache"].setdefault("analyst_nasdaq", {})
+    entry = store.get(ticker)
+    if entry and age_seconds(entry["timestamp"]) < (ANALYST_COUNTS_SEC if entry["data"] else 3600):
+        return entry["data"]
+    result = None
+    try:
+        base = f"https://api.nasdaq.com/api/analyst/{ticker.upper()}"
+        ratings = requests.get(base + "/ratings", headers=NASDAQ_HEADERS, timeout=12).json().get("data") or {}
+        score = _NASDAQ_SCORE.get((ratings.get("meanRatingType") or "").strip().lower())
+        if score:
+            match = re.search(r"Based on (\d+) analysts", ratings.get("ratingsSummary") or "")
+            result = {"score": score, "total": int(match.group(1)) if match else None, "counts": None,
+                      "target_mean": None, "target_low": None, "target_high": None}
+            targets = requests.get(base + "/targetprice", headers=NASDAQ_HEADERS,
+                                   timeout=12).json().get("data") or {}
+            overview = targets.get("consensusOverview") or {}
+            if overview:
+                result.update(target_mean=overview.get("priceTarget"), target_low=overview.get("lowPriceTarget"),
+                              target_high=overview.get("highPriceTarget"))
+                if all(overview.get(k) is not None for k in ("buy", "hold", "sell")):
+                    result["counts"] = [("Sell", int(overview["sell"])), ("Hold", int(overview["hold"])),
+                                        ("Buy", int(overview["buy"]))]
+    except Exception as err:
+        log_event("ERROR", "nasdaq", f"analyst data for {ticker}: {err}")
+        return entry["data"] if entry else None
+    store[ticker] = {"timestamp": iso_now(), "data": result}
+    save_cache(state["cache"])
+    return result
+
+
 def analyst_consensus(state, ticker, info):
     """Analyst consensus for the gauge, or None if no analyst data is available.
 
@@ -505,13 +547,21 @@ def analyst_consensus(state, ticker, info):
     if not score:
         score = _KEY_SCORE.get(info.get("recommendationKey") or "")
     if not score:
-        return None
+        alt = nasdaq_analyst(state, ticker)                  # Yahoo gave nothing: try Nasdaq (US tickers)
+        if not alt:
+            return None
+        score = alt["score"]
+        return {"score": score, "label": rating_label(score), "position": 10.0 + (5.0 - score) / 4.0 * 80.0,
+                "counts": alt["counts"], "total": alt["total"], "source": "Nasdaq.com",
+                "target_mean": alt["target_mean"], "target_low": alt["target_low"],
+                "target_high": alt["target_high"]}
     score = max(1.0, min(5.0, float(score)))
     ordered = [("Strong sell", "strongSell"), ("Sell", "sell"), ("Hold", "hold"), ("Buy", "buy"),
                ("Strong buy", "strongBuy")]
     return {"score": score, "label": rating_label(score), "position": 10.0 + (5.0 - score) / 4.0 * 80.0,
             "counts": [(name, counts[key]) for name, key in ordered] if counts else None,
             "total": sum(counts.values()) if counts else info.get("numberOfAnalystOpinions"),
+            "source": "Yahoo Finance",
             "target_mean": info.get("targetMeanPrice"), "target_low": info.get("targetLowPrice"),
             "target_high": info.get("targetHighPrice")}
 

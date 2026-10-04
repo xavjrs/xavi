@@ -71,7 +71,7 @@
 {% endif %}
 
 <div class="section">Analyst consensus</div>
-<div class="note">What professional analysts covering this company say, from Yahoo Finance. It is their opinion, not ours, it can be wrong, and it is not a recommendation.</div>
+<div class="note">What professional analysts covering this company say{% if analyst %}, from {{ analyst.source }}{% endif %}. It is their opinion, not ours, it can be wrong, and it is not a recommendation.</div>
 {% if analyst %}
 <div class="card gauge-card">
     <div class="gauge" role="img" aria-label="Analyst consensus: {{ analyst.label }} (score {{ '%.1f' % analyst.score }} out of 5)">
@@ -96,7 +96,8 @@
     {% endif %}
 </div>
 {% else %}
-<div class="empty">No analyst ratings are available for this security right now (smaller companies and funds often have none).</div>
+<div class="empty">{% if demo and '.' in ticker %}Analyst ratings for UK-listed shares aren't available in the online demo (the downloadable version shows them).
+    {% else %}No analyst ratings are available for this security right now (smaller companies and funds often have none).{% endif %}</div>
 {% endif %}
 {% if holding %}<ul class="facts"><li><b>Your notes:</b> {{ holding.notes or '—' }}</li></ul>{% endif %}
 {% endif %}
