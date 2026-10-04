@@ -588,6 +588,7 @@ def fetch_news(state, force=False):
     labels = ["Google News", "Bing News", "Yahoo Finance", "Yahoo RSS"] + (["SEC"] if ciks else []) + \
         (["NewsAPI"] if key else [])
     items = []
+    fetched = {label: 0 for label in labels}          # raw stories per source, for the thin-feed hint
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = [pool.submit(job, label, h) for h in holdings for label in labels]
         for future in futures:
@@ -595,6 +596,7 @@ def fetch_news(state, force=False):
             if isinstance(result, Exception):
                 notes.add(f"{label} unavailable for some holdings.")
             else:
+                fetched[label] += len(result)
                 items.extend(result)
 
     aliases = {h["ticker"]: holding_aliases(h) for h in holdings}
@@ -614,6 +616,10 @@ def fetch_news(state, force=False):
         cleaned.append(item)
     cleaned = group_duplicates(cleaned)
     cleaned.sort(key=lambda i: i["published"], reverse=True)
+    if len(cleaned) < 2 * len(holdings):
+        counts = ", ".join(f"{label} {count}" for label, count in fetched.items())
+        notes.add(f"Few stories came back (raw stories fetched: {counts}).")
+        log_event("WARN", "news", f"thin feed: fetched {counts}; kept {len(cleaned)}")
     if cleaned:
         for old_key in [k for k, v in state["cache"].items() if k.startswith("news:")
                         and age_seconds(v.get("timestamp")) > 2 * 86400]:
