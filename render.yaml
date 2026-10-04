@@ -1,0 +1,23 @@
+# Render blueprint: public XAVI demo (sandbox mode, no accounts, nothing kept).
+# Free web service. It sleeps when idle, so the first visit can take up to a minute.
+services:
+  - type: web
+    name: xavi-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r web/requirements.txt
+    startCommand: gunicorn --chdir web --workers 1 --threads 4 --timeout 90 --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /static/style.css
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: XAVI_DEMO
+        value: "1"
+      - key: XAVI_HTTPS
+        value: "1"
+      - key: XAVI_BEHIND_PROXY
+        value: "1"
+      - key: XAVI_DATA_DIR
+        value: /tmp/xavi
+      - key: XAVI_SECRET_KEY
+        generateValue: true

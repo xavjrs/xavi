@@ -12,9 +12,13 @@ Information only - not financial advice.
 import io
 import json
 import os
+import re
 import secrets
+import shutil
 import sys
 import threading
+import time
+from collections import defaultdict, deque
 from datetime import date, datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -48,10 +52,22 @@ def load_secret_key():
     return key
 
 
+DEMO = os.environ.get("XAVI_DEMO") == "1"          # public sandbox mode: no accounts, nothing kept
+SANDBOX_DIR = os.path.join(DATA_DIR, "sandboxes")
+SANDBOX_MINUTES = int(os.environ.get("XAVI_SANDBOX_MINUTES", "30"))
+MAX_SANDBOXES = int(os.environ.get("XAVI_MAX_SANDBOXES", "200"))
+MAX_HOLDINGS = 25                                   # per sandbox
+SAMPLE_HOLDINGS = (("AAPL", 10, 150.0), ("MSFT", 5, 320.0), ("BP.L", 50, 4.50), ("HSBA.L", 100, 7.00))
+_sandbox_lock = threading.Lock()
+
 app = Flask(__name__)
 app.secret_key = load_secret_key()
 app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True,
-                  TEMPLATES_AUTO_RELOAD=True, MAX_CONTENT_LENGTH=2 * 1024 * 1024)
+                  SESSION_COOKIE_SECURE=os.environ.get("XAVI_HTTPS") == "1",
+                  TEMPLATES_AUTO_RELOAD=not DEMO, MAX_CONTENT_LENGTH=2 * 1024 * 1024)
+if os.environ.get("XAVI_BEHIND_PROXY") == "1":      # hosted behind one reverse proxy (Render etc.)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # The shared price cache is one JSON file; serialise writes, and keep Yahoo retries short so a
 # page never hangs for long when Yahoo is slow.
@@ -101,14 +117,107 @@ app.jinja_env.globals.update(csrf_input=csrf_input, csrf_token=csrf_token, fmt_d
                              human=human)
 
 
+# ---- demo sandboxes: one private temporary folder per visitor, seeded with a sample portfolio ----
+def _sandbox_path(sandbox_id):
+    return os.path.join(SANDBOX_DIR, sandbox_id)
+
+
+def seed_sample(folder):
+    """Write the sample portfolio into `folder` (used for new sandboxes and 'Reset sample')."""
+    os.makedirs(folder, exist_ok=True)
+    state = {"portfolio": [], "cache": core.load_cache(), "config": core.load_config(folder), "dir": folder}
+    state["config"].update(cash=5000.0, isa_used=15000.0, display_name="Demo visitor")
+    core.save_config(state["config"], folder)
+    core.save_portfolio([], folder)
+    core.save_transactions([], folder)
+    for ticker, shares, price in SAMPLE_HOLDINGS:
+        core.add_position(state, ticker, shares, price, "sample holding", False, "2025-10-01",
+                          skip_price_check=True)
+
+
+def _expire_sandboxes():
+    """Delete sandboxes nobody has touched for SANDBOX_MINUTES. Returns how many remain."""
+    os.makedirs(SANDBOX_DIR, exist_ok=True)
+    cutoff, kept = time.time() - SANDBOX_MINUTES * 60, 0
+    for name in os.listdir(SANDBOX_DIR):
+        path = _sandbox_path(name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                kept += 1
+        except OSError:
+            pass
+    return kept
+
+
+def ensure_sandbox(fresh=False):
+    """The visitor's sandbox id: reuse their live one, or make a new sample copy. None if we're full."""
+    with _sandbox_lock:
+        sid = session.get("sandbox", "")
+        path = _sandbox_path(sid) if re.fullmatch(r"[0-9a-f]{16}", sid) else None
+        if path and os.path.isdir(path) and not fresh:
+            os.utime(path, None)                         # activity keeps it alive
+            return sid
+        if path and os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        if _expire_sandboxes() >= MAX_SANDBOXES:
+            return None
+        sid = secrets.token_hex(8)
+        seed_sample(_sandbox_path(sid))
+        session["sandbox"], session["username"] = sid, "demo"
+        return sid
+
+
+# ---- simple per-visitor rate limit (in memory; fine for one small server) ----
+_hits = defaultdict(deque)
+_hits_lock = threading.Lock()
+RATE_RULES = {"security": (20, 60), "news": (20, 60), "holdings_add": (30, 60)}   # name: (calls, seconds)
+RATE_ALL = (240, 60)
+
+
+def rate_limited(key, calls, seconds):
+    now = time.time()
+    with _hits_lock:
+        queue = _hits[key]
+        while queue and queue[0] < now - seconds:
+            queue.popleft()
+        if len(queue) >= calls:
+            return True
+        queue.append(now)
+        if len(_hits) > 5000:                            # drop idle visitors
+            for stale in [k for k, q in _hits.items() if not q or q[-1] < now - 120][:2000]:
+                _hits.pop(stale, None)
+    return False
+
+
 @app.before_request
 def gate():
-    """CSRF check on every POST, then send logged-out visitors to the login page."""
+    """Rate limit and CSRF check, then make sure there is a signed-in user (or demo sandbox)."""
+    if request.endpoint != "static":
+        who = request.remote_addr or "?"
+        rule = RATE_RULES.get(request.endpoint)
+        if (DEMO and rate_limited(("all", who), *RATE_ALL)) or \
+                (DEMO and rule and rate_limited((request.endpoint, who), *rule)):
+            return render_template("error.html", title="Slow down a little",
+                                   message="Too many requests from your connection. Wait a minute and try again."), 429
     if request.method == "POST":
         sent = request.form.get("_csrf") or request.headers.get("X-CSRF-Token", "")
         if not sent or not secrets.compare_digest(sent, session.get("_csrf", "")):
             abort(400, "Your session expired or the form was out of date. Go back, reload the "
                        "page and try again.")
+    if request.endpoint == "static":
+        return None
+    if DEMO:
+        if request.endpoint in ("login", "signup"):
+            return redirect(url_for("dashboard"))
+        had = session.get("sandbox")
+        if ensure_sandbox() is None:
+            return render_template("error.html", title="The demo is full",
+                                   message="Lots of people are trying XAVI right now. Please try again in a few minutes."), 503
+        if had and not os.path.isdir(_sandbox_path(had)):   # (only reached if it expired under us)
+            flash("Your sandbox timed out, so here is a fresh sample portfolio.", "success")
+        return None
     if request.endpoint in PUBLIC_ENDPOINTS:
         return None
     user = session.get("username")
@@ -118,15 +227,23 @@ def gate():
     return None
 
 
+def current_folder():
+    """Folder holding this visitor's files: their sandbox (demo) or their account folder."""
+    if DEMO:
+        return _sandbox_path(session["sandbox"])
+    return auth.user_dir(session["username"])
+
+
 @app.context_processor
 def inject_common():
     """Sidebar values, current time and theme-independent helpers for every page."""
     out = {"now": datetime.now(), "side_allowance_pct": 0.0, "side_allowance_left": 0.0,
-           "side_allowance_total": 20000.0, "side_label": "S&S ISA", "side_name": ""}
+           "side_allowance_total": 20000.0, "side_label": "S&S ISA", "side_name": "", "demo": DEMO,
+           "sandbox_minutes": SANDBOX_MINUTES}
     user = session.get("username")
     if user:
         try:
-            cfg = core.load_config(auth.user_dir(user))
+            cfg = core.load_config(current_folder())
             total = float(cfg.get("isa_allowance") or 20000.0)
             used = float(cfg.get("isa_used") or 0.0)
             out.update(side_allowance_total=total, side_allowance_left=total - used,
@@ -161,7 +278,7 @@ def server_error(error):
 def user_state():
     """This person's data in the shape isa_core expects (loaded fresh on every request)."""
     name = session["username"]
-    folder = auth.user_dir(name)
+    folder = current_folder()
     return {"portfolio": core.load_portfolio(folder), "cache": core.load_cache(),
             "config": core.load_config(folder), "dir": folder, "user": name,
             "transactions": core.load_transactions(folder)}
@@ -240,6 +357,16 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/demo/reset", methods=["POST"])
+def demo_reset():
+    """Demo mode: throw away this visitor's changes and start again from the sample portfolio."""
+    if not DEMO:
+        abort(404)
+    if ensure_sandbox(fresh=True) is None:
+        abort(400, "The demo is full right now. Try again in a few minutes.")
+    return result(True, "Sample portfolio restored.")
+
+
 # ---------------------------------------------------------------------------------------------
 # dashboard
 # ---------------------------------------------------------------------------------------------
@@ -302,6 +429,8 @@ def holdings_add():
     """Add shares to a holding (JSON in, JSON out)."""
     data = request.get_json(silent=True) or {}
     state = user_state()
+    if DEMO and len(state["portfolio"]) >= MAX_HOLDINGS:
+        return jsonify(success=False, error=f"The demo is limited to {MAX_HOLDINGS} holdings."), 400
     ccy = data.get("currency", "GBP")
     if ccy not in ("GBP", "GBp", "USD"):
         return jsonify(success=False, error="Currency must be pounds, pence or dollars."), 400
@@ -562,6 +691,8 @@ def settings_cash():
 
 @app.route("/settings/keys", methods=["POST"])
 def settings_keys():
+    if DEMO:
+        abort(404)
     state = user_state()
     f = request.form
     state["config"]["api_keys"].update({"newsapi": f.get("newsapi", "").strip(),
@@ -575,6 +706,8 @@ def settings_keys():
 
 @app.route("/settings/password", methods=["POST"])
 def settings_password():
+    if DEMO:
+        abort(404)
     f = request.form
     if f.get("new_password") != f.get("new_password2"):
         return result(False, "The new passwords don't match.", target="settings")
@@ -596,6 +729,8 @@ def settings_reset():
 
 @app.route("/settings/delete", methods=["POST"])
 def settings_delete():
+    if DEMO:
+        abort(404)
     f = request.form
     if f.get("confirm") != "DELETE":
         return result(False, "Type DELETE (in capitals) to confirm.", target="settings")
@@ -652,8 +787,11 @@ def ensure_demo_account():
 
 if __name__ == "__main__":
     print("Starting XAVI web app...")
-    print("Open http://127.0.0.1:5000 in your browser")
-    if os.environ.get("XAVI_NO_DEMO") != "1":
+    print(f"Open http://127.0.0.1:{os.environ.get('XAVI_PORT', '5000')} in your browser")
+    if DEMO:
+        print("Demo (sandbox) mode: no accounts, every visitor gets a private sample portfolio.")
+    elif os.environ.get("XAVI_NO_DEMO") != "1":
         ensure_demo_account()
         print("Demo user: test / password123  (set XAVI_NO_DEMO=1 to skip creating it)")
-    app.run(debug=os.environ.get("XAVI_DEBUG") == "1", host="127.0.0.1", port=5000)
+    app.run(debug=os.environ.get("XAVI_DEBUG") == "1", host="127.0.0.1",
+            port=int(os.environ.get("XAVI_PORT", "5000")))

@@ -38,6 +38,7 @@
     <button type="submit" class="btn btn-primary">Save</button>
 </form>
 
+{% if not demo %}
 <div class="section">News &amp; data keys (optional)</div>
 <div class="note">Stored only in your own account folder. A SEC contact email adds official filings for US companies (the SEC requires it).</div>
 <form method="POST" action="{{ url_for('settings_keys') }}" class="card">
@@ -49,6 +50,7 @@
     </div>
     <button type="submit" class="btn btn-primary">Save keys</button>
 </form>
+{% endif %}
 
 <div class="section">Your data</div>
 <div class="note">Backups don't include your keys and aren't encrypted: keep them somewhere safe.</div>
@@ -69,6 +71,7 @@
     <div class="note">Removes all holdings and transactions. Your account and settings stay.</div>
 </form>
 
+{% if not demo %}
 <div class="section">Password &amp; account</div>
 <div class="note">There is no password recovery.</div>
 <form method="POST" action="{{ url_for('settings_password') }}" class="card">
@@ -90,4 +93,5 @@
     </div>
     <div class="note">Permanently deletes this account and all of its data. It can't be recovered.</div>
 </form>
+{% endif %}
 {% endblock %}

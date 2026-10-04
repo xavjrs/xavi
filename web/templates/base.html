@@ -43,12 +43,21 @@
         <div class="side-label">Appearance</div>
         {{ theme_switch() }}
 
+        {% if demo %}
+        <div class="side-label">Demo</div>
+        <div class="side-note">Your own private sandbox. No sign-up needed.</div>
+        <form method="post" action="{{ url_for('demo_reset') }}" class="side-actions">
+            {{ csrf_input() }}
+            <button type="submit" class="btn btn-small">Reset sample</button>
+        </form>
+        {% else %}
         <div class="side-label">Account</div>
         <div class="side-note">{{ side_name }}</div>
         <form method="post" action="{{ url_for('logout') }}" class="side-actions">
             {{ csrf_input() }}
             <button type="submit" class="btn btn-small">Log out</button>
         </form>
+        {% endif %}
     </aside>
 
     <main class="main">
@@ -60,6 +69,12 @@
             <div>{{ wordmark(24) }}</div>
             <div></div>
         </div>
+
+        {% if demo %}
+        <div class="alert alert-success demo-banner" role="note"><strong>Live demo.</strong> This is a sample portfolio
+            with live Yahoo Finance prices. Add, sell or change anything: your changes are private to you and are
+            deleted after {{ sandbox_minutes }} minutes of inactivity. Please use example holdings only, not your real ones.</div>
+        {% endif %}
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}

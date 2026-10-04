@@ -25,7 +25,21 @@ The same dashboard as a Flask app with server-drawn charts and a light/dark swit
 Optional environment variables: `XAVI_DATA_DIR` (where accounts are stored), `XAVI_NO_DEMO=1`
 (don't create the local `test` demo account), `XAVI_DEBUG=1` (Flask debug mode),
 `XAVI_SECRET_KEY` (session key; otherwise one is generated and kept locally).
-The demo account is for local testing only. Do not expose this app to the internet.
+The local `test` account is for local testing only. Do not expose the account version to the internet.
+
+### Public demo (sandbox mode)
+
+Set `XAVI_DEMO=1` and the app runs as a public try-it-out demo: no accounts and no sign-up.
+Every visitor gets a private sandbox with a sample portfolio and live prices. They can add,
+sell and edit holdings; changes are deleted after 30 minutes of inactivity
+(`XAVI_SANDBOX_MINUTES`), or when they press **Reset sample**. At most 200 sandboxes exist at once
+(`XAVI_MAX_SANDBOXES`), 25 holdings each, and ticker lookups are rate limited per connection.
+Passwords, API keys and account deletion are switched off, and nothing is kept long term.
+
+Deploy on Render: connect this repo and use the included `render.yaml` blueprint
+(free plan; it sleeps when idle, so the first visit can take up to a minute).
+The deploy sets `XAVI_HTTPS=1` (secure cookies) and `XAVI_BEHIND_PROXY=1` (correct visitor IPs).
+Try it locally: `set XAVI_DEMO=1` then `python web/app.py`.
 
 ## Pages (web app)
 
