@@ -593,6 +593,26 @@ def news():
         updated=core.show_time(state, updated) if updated else "—")
 
 
+def range_return(state, ticker, rng, data, last):
+    """Price return over the chosen chart range: latest close vs the close the range starts from.
+
+    For YTD the start is the last close of the previous year. Dividends are not included.
+    """
+    if not data or last is None or len(data["close"]) < 2:
+        return None
+    base_date, base = data["dates"][0], data["close"][0]
+    if rng == "YTD":
+        earlier = core.fetch_history(state, ticker, "1Y")
+        if earlier:
+            before = [(d, c) for d, c in zip(earlier["dates"], earlier["close"])
+                      if d < f"{date.today().year}-01-01"]
+            if before:
+                base_date, base = before[-1]
+    if not base:
+        return None
+    return {"pct": (last / base - 1) * 100, "change": last - base, "since": base_date}
+
+
 @app.route("/security")
 def security():
     state = user_state()
@@ -633,6 +653,8 @@ def security():
         rng_pos = max(0, min(100, (last - low * scale) / ((high - low) * scale) * 100))
     dividend = info["dividendRate"] * scale / last * 100 if info.get("dividendRate") and last else None
     earnings = core.fetch_earnings(state, ticker)
+    perf = range_return(state, ticker, rng, data, last)
+    analyst = core.analyst_consensus(state, ticker, info)
     charts_html = None
     if data and len(data["close"]) > 1:
         dates, close, volume = data["dates"], data["close"], data["volume"]
@@ -649,7 +671,7 @@ def security():
                change=change, change_pct=(change / prev * 100) if change is not None and prev else None,
                last_date=recent["dates"][-1] if recent else None, earnings=earnings,
                dividend=dividend, low=low * scale if low else None, high=high * scale if high else None,
-               rng_pos=rng_pos, charts=charts_html, scale=scale)
+               rng_pos=rng_pos, charts=charts_html, scale=scale, perf=perf, analyst=analyst)
     return render_template("security.html", **ctx)
 
 

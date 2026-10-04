@@ -25,8 +25,13 @@
 <div class="sec-row">
     {% if last is not none %}
     <div><span class="px">{{ symbol }}{{ '{:,.2f}'.format(last) }}</span><span class="ccy">{{ ccy }}</span>
-        {% if change is not none %}<span class="{{ 'pos' if change >= 0 else 'neg' }}">{{ '%+.2f' % change }} ({{ '%+.2f%%' % change_pct }})</span>{% endif %}
+        {% if change is not none %}<span class="{{ 'pos' if change >= 0 else 'neg' }}">{{ '%+.2f' % change }} ({{ '%+.2f%%' % change_pct }})</span><span class="ccy">1 day</span>{% endif %}
         <div class="k">Last close · {{ fmt_date(last_date) }}</div></div>
+    {% endif %}
+    {% if perf %}
+    <div><div class="v {{ 'pos' if perf.pct >= 0 else 'neg' }}">{{ '{:+,.2f}%'.format(perf.pct) }}
+            <span class="ccy">{{ '+' if perf.change >= 0 else '-' }}{{ symbol }}{{ '{:,.2f}'.format(perf.change|abs) }}</span></div>
+        <div class="k">{{ rng }} price return · since {{ fmt_date(perf.since) }}{% if rng in ('5Y', 'ALL') %} (approx., weekly/monthly data){% endif %} · excludes dividends</div></div>
     {% endif %}
     <div><div class="v">{{ fmt_date(earnings[0]) if earnings else '—' }}</div><div class="k">Next earnings date</div></div>
     <div><div class="v">{{ info.get('sector') or '—' }}</div><div class="k">Sector</div></div>
@@ -65,15 +70,34 @@
 </div>
 {% endif %}
 
-<div class="section">Analyst consensus &amp; notes</div>
-<div class="note">Source: Yahoo Finance. Not a recommendation.</div>
-<ul class="facts">
-    {% set key = info.get('recommendationKey') %}
-    <li><b>Analyst consensus (Yahoo Finance):</b>
-        {{ key.replace('_', ' ').upper() if key and key != 'none' else 'no coverage found' }}
-        {% if info.get('numberOfAnalystOpinions') %} from {{ info.numberOfAnalystOpinions }} analysts{% endif %}
-        {% if info.get('targetMeanPrice') %}; mean target {{ '{:,.2f}'.format(info.targetMeanPrice * scale) }} {{ ccy }}{% endif %}</li>
-    {% if holding %}<li><b>Your notes:</b> {{ holding.notes or '—' }}</li>{% endif %}
-</ul>
+<div class="section">Analyst consensus</div>
+<div class="note">What professional analysts covering this company say, from Yahoo Finance. It is their opinion, not ours, it can be wrong, and it is not a recommendation.</div>
+{% if analyst %}
+<div class="card gauge-card">
+    <div class="gauge" role="img" aria-label="Analyst consensus: {{ analyst.label }} (score {{ '%.1f' % analyst.score }} out of 5)">
+        {% for name in ['Strong sell', 'Sell', 'Hold', 'Buy', 'Strong buy'] %}
+        <div class="seg seg{{ loop.index }} {{ 'on' if name == analyst.label }}">{{ name }}</div>
+        {% endfor %}
+        <div class="marker" style="left: {{ '%.1f' % analyst.position }}%"></div>
+    </div>
+    <div class="gauge-meta">
+        <span class="gauge-verdict">{{ analyst.label }}</span>
+        <span class="muted">average score {{ '%.1f' % analyst.score }} of 5 (1 = strong buy, 5 = strong sell)
+            {% if analyst.total %} · {{ analyst.total }} analysts{% endif %}</span>
+    </div>
+    {% if analyst.counts %}
+    <div class="gauge-counts">
+        {% for name, n in analyst.counts|reverse %}<span><b>{{ n }}</b> {{ name }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    {% if analyst.target_mean %}
+    <div class="muted" style="margin-top:8px">Analyst price targets: average {{ symbol }}{{ '{:,.2f}'.format(analyst.target_mean * scale) }}
+        {% if analyst.target_low and analyst.target_high %} (range {{ symbol }}{{ '{:,.2f}'.format(analyst.target_low * scale) }} to {{ symbol }}{{ '{:,.2f}'.format(analyst.target_high * scale) }}){% endif %} {{ ccy }}</div>
+    {% endif %}
+</div>
+{% else %}
+<div class="empty">No analyst ratings are available for this security right now (smaller companies and funds often have none).</div>
+{% endif %}
+{% if holding %}<ul class="facts"><li><b>Your notes:</b> {{ holding.notes or '—' }}</li></ul>{% endif %}
 {% endif %}
 {% endblock %}

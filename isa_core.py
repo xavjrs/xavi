@@ -345,8 +345,9 @@ def fetch_company_info(state, ticker, force=False):
     """Fundamentals from yfinance .info (cached 1 day). Returns dict or {} on failure."""
     store = state["cache"].setdefault("info", {})
     entry = store.get(ticker)
-    if entry:
+    if entry and ("recommendationMean" in entry["data"] or entry["data"].get("_partial")):
         # a partial (fallback) result is retried after an hour; a full one is kept a day
+        # (entries saved before analyst fields existed are refetched)
         limit = 3600 if entry["data"].get("_partial") else INFO_CACHE_SEC
         if not force and age_seconds(entry["timestamp"]) < limit:
             return entry["data"]
@@ -356,7 +357,7 @@ def fetch_company_info(state, ticker, force=False):
         keys = ["shortName", "longName", "sector", "industry", "country", "marketCap",
                 "trailingPE", "forwardPE", "beta", "fiftyTwoWeekLow", "fiftyTwoWeekHigh",
                 "dividendYield", "dividendRate", "fullExchangeName", "targetMeanPrice",
-                "recommendationKey",
+                "recommendationKey", "recommendationMean", "targetLowPrice", "targetHighPrice",
                 "numberOfAnalystOpinions", "currency", "quoteType"]
         data = {key: raw.get(key) for key in keys}
     except Exception as err:
@@ -416,7 +417,7 @@ def info_fallback(state, ticker):
 
 def fetch_finnhub_recommendation(state, ticker, force=False):
     """Latest analyst buy/hold/sell counts from Finnhub (cached 1 week). None if unavailable."""
-    key = state["config"]["api_keys"].get("finnhub", "")
+    key = state["config"]["api_keys"].get("finnhub", "") or os.environ.get("FINNHUB_API_KEY", "")
     store = state["cache"].setdefault("analyst", {})
     entry = store.get(ticker)
     if entry and not force and age_seconds(entry["timestamp"]) < ANALYST_CACHE_SEC:
@@ -440,6 +441,79 @@ def fetch_finnhub_recommendation(state, ticker, force=False):
         log_event("ERROR", "finnhub", f"{ticker}: {err}")
         notify("Analyst data unavailable; using cached data if any.")
         return entry["data"] if entry else None
+
+
+RATING_NAMES = ["Strong sell", "Sell", "Hold", "Buy", "Strong buy"]          # left to right on the gauge
+_KEY_SCORE = {"strong_buy": 1.0, "buy": 2.0, "hold": 3.0, "underperform": 4.0, "sell": 4.0,
+              "strong_sell": 5.0}
+_COUNT_KEYS = ("strongBuy", "buy", "hold", "sell", "strongSell")
+ANALYST_COUNTS_SEC = 12 * 3600
+
+
+def rating_label(score):
+    """Analyst mean score (1 = strong buy ... 5 = strong sell) -> Strong buy / Buy / Hold / Sell / Strong sell."""
+    if score <= 1.5:
+        return "Strong buy"
+    if score <= 2.5:
+        return "Buy"
+    if score <= 3.5:
+        return "Hold"
+    if score <= 4.5:
+        return "Sell"
+    return "Strong sell"
+
+
+def _analyst_counts(state, ticker):
+    """{'strongBuy': n, 'buy': n, 'hold': n, 'sell': n, 'strongSell': n} or None. Yahoo first, then Finnhub if a key is set."""
+    store = state["cache"].setdefault("analyst_counts", {})
+    entry = store.get(ticker)
+    if entry:
+        limit = ANALYST_COUNTS_SEC if entry["data"] else 3600      # retry a miss after an hour
+        if age_seconds(entry["timestamp"]) < limit:
+            return entry["data"]
+    counts = None
+    try:
+        summary = yf.Ticker(ticker).recommendations_summary
+        if summary is not None and len(summary):
+            row = summary.iloc[0]
+            counts = {k: int(row.get(k) or 0) for k in _COUNT_KEYS}
+    except Exception as err:
+        log_event("ERROR", "yfinance", f"analyst counts for {ticker}: {err}")
+    if not counts or not sum(counts.values()):
+        counts = None
+        if state["config"]["api_keys"].get("finnhub") or os.environ.get("FINNHUB_API_KEY"):
+            row = fetch_finnhub_recommendation(state, ticker) or {}
+            found = {k: int(row.get(k) or 0) for k in _COUNT_KEYS}
+            counts = found if sum(found.values()) else None
+    store[ticker] = {"timestamp": iso_now(), "data": counts}
+    save_cache(state["cache"])
+    return counts
+
+
+def analyst_consensus(state, ticker, info):
+    """Analyst consensus for the gauge, or None if no analyst data is available.
+
+    {'score': 2.2 (1 strong buy .. 5 strong sell), 'label': 'Buy', 'position': 10-90 (% along the gauge; segment centres),
+     'counts': [(name, n), ...] in gauge order, 'total': n, 'target_mean/low/high': per-share or None}
+    Third-party opinion from Yahoo Finance (or Finnhub); we never rate anything ourselves.
+    """
+    counts = _analyst_counts(state, ticker)
+    score = info.get("recommendationMean")
+    if not score and counts and sum(counts.values()):
+        weights = (1, 2, 3, 4, 5)
+        score = sum(w * counts[k] for w, k in zip(weights, _COUNT_KEYS)) / sum(counts.values())
+    if not score:
+        score = _KEY_SCORE.get(info.get("recommendationKey") or "")
+    if not score:
+        return None
+    score = max(1.0, min(5.0, float(score)))
+    ordered = [("Strong sell", "strongSell"), ("Sell", "sell"), ("Hold", "hold"), ("Buy", "buy"),
+               ("Strong buy", "strongBuy")]
+    return {"score": score, "label": rating_label(score), "position": 10.0 + (5.0 - score) / 4.0 * 80.0,
+            "counts": [(name, counts[key]) for name, key in ordered] if counts else None,
+            "total": sum(counts.values()) if counts else info.get("numberOfAnalystOpinions"),
+            "target_mean": info.get("targetMeanPrice"), "target_low": info.get("targetLowPrice"),
+            "target_high": info.get("targetHighPrice")}
 
 
 HIGH_WORDS = ["earnings", "results", "guidance", "profit warning", "investigation", "probe",
