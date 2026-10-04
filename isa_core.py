@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 import yfinance as yf
@@ -344,8 +345,12 @@ def fetch_company_info(state, ticker, force=False):
     """Fundamentals from yfinance .info (cached 1 day). Returns dict or {} on failure."""
     store = state["cache"].setdefault("info", {})
     entry = store.get(ticker)
-    if entry and not force and age_seconds(entry["timestamp"]) < INFO_CACHE_SEC:
-        return entry["data"]
+    if entry:
+        # a partial (fallback) result is retried after an hour; a full one is kept a day
+        limit = 3600 if entry["data"].get("_partial") else INFO_CACHE_SEC
+        if not force and age_seconds(entry["timestamp"]) < limit:
+            return entry["data"]
+    data = None
     try:
         raw = yf.Ticker(ticker).info
         keys = ["shortName", "longName", "sector", "industry", "country", "marketCap",
@@ -354,12 +359,59 @@ def fetch_company_info(state, ticker, force=False):
                 "recommendationKey",
                 "numberOfAnalystOpinions", "currency", "quoteType"]
         data = {key: raw.get(key) for key in keys}
-        store[ticker] = {"timestamp": iso_now(), "data": data}
-        save_cache(state["cache"])
-        return data
     except Exception as err:
         log_event("ERROR", "yfinance", f"info for {ticker} failed: {err}")
+    if data is None or (data.get("marketCap") is None and data.get("trailingPE") is None):
+        partial = info_fallback(state, ticker)       # Yahoo's detailed endpoint may be blocked
+        if partial:
+            data = {**(data or {}), **{k: v for k, v in partial.items() if v is not None}, "_partial": True}
+    if data is None:
         return entry["data"] if entry else {}
+    store[ticker] = {"timestamp": iso_now(), "data": data}
+    save_cache(state["cache"])
+    return data
+
+
+def info_fallback(state, ticker):
+    """Basic company facts from Yahoo's price and valuation endpoints (market cap, P/E, forward P/E,
+    52-week range, currency, name). Used when the full info call is blocked or empty."""
+    out = {}
+    holding = next((h for h in state.get("portfolio", []) if h["ticker"] == ticker), None)
+    if holding:
+        out.update(shortName=holding.get("name"), longName=holding.get("name"),
+                   sector=(holding.get("sector") if holding.get("sector") != "Unknown" else None),
+                   country=(holding.get("region") if holding.get("region") != "Unknown" else None))
+    try:
+        handle = yf.Ticker(ticker)
+        meta = handle.get_history_metadata() or {}
+        out.setdefault("shortName", None)
+        out["shortName"] = out.get("shortName") or meta.get("shortName")
+        out["longName"] = out.get("longName") or meta.get("longName") or meta.get("shortName")
+        out.update(currency=meta.get("currency"), fullExchangeName=meta.get("fullExchangeName"),
+                   quoteType=meta.get("instrumentType"),
+                   fiftyTwoWeekLow=meta.get("fiftyTwoWeekLow"), fiftyTwoWeekHigh=meta.get("fiftyTwoWeekHigh"))
+    except Exception as err:
+        log_event("ERROR", "yfinance", f"metadata for {ticker} failed: {err}")
+    try:
+        now = int(time.time())
+        resp = requests.get(
+            f"https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{ticker}",
+            params={"symbol": ticker, "type": "trailingMarketCap,trailingPeRatio,trailingForwardPeRatio",
+                    "merge": "false", "period1": now - 86400 * 20, "period2": now},
+            headers={"User-Agent": WEB_USER_AGENT}, timeout=12)
+        resp.raise_for_status()
+        wanted = {"trailingMarketCap": "marketCap", "trailingPeRatio": "trailingPE",
+                  "trailingForwardPeRatio": "forwardPE"}
+        for block in resp.json().get("timeseries", {}).get("result", []) or []:
+            kind = (block.get("meta", {}).get("type") or [""])[0]
+            points = block.get(kind) or []
+            if kind in wanted and points:
+                value = ((points[-1] or {}).get("reportedValue") or {}).get("raw")
+                if value:
+                    out[wanted[kind]] = value
+    except Exception as err:
+        log_event("ERROR", "yahoo", f"valuation for {ticker} failed: {err}")
+    return {k: v for k, v in out.items() if v is not None} or None
 
 
 def fetch_finnhub_recommendation(state, ticker, force=False):
@@ -420,6 +472,49 @@ def news_from_yfinance(ticker):
     return items
 
 
+WEB_USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/124.0 Safari/537.36")
+
+
+def _rss_items(ticker, content, default_source, source_of=None):
+    """Turn an RSS document into our news item dicts."""
+    items = []
+    for node in ET.fromstring(content).iter("item"):
+        title = (node.findtext("title") or "").strip()
+        try:
+            when = parsedate_to_datetime(node.findtext("pubDate")).astimezone(timezone.utc)
+            published = when.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except (TypeError, ValueError):
+            published = ""
+        source = (source_of(node) if source_of else "") or default_source
+        link = node.findtext("link") or ""
+        if "bing.com/news/apiclick" in link:             # use the real article address
+            link = unquote(parse_qs(urlparse(link).query).get("url", [link])[0])
+        if title and published:
+            items.append({"ticker": ticker, "title": title, "summary": "", "source": source,
+                          "published": published, "url": link})
+    return items
+
+
+def news_from_bing(ticker, query):
+    """Headlines from Bing News RSS (a second wide net, works from cloud hosts)."""
+    resp = requests.get("https://www.bing.com/news/search",
+                        params={"q": query + " stock", "format": "rss", "setmkt": "en-GB"},
+                        headers={"User-Agent": WEB_USER_AGENT}, timeout=12)
+    resp.raise_for_status()
+    return _rss_items(ticker, resp.content, "Bing News", lambda node: next(
+        ((c.text or "").strip() for c in node if c.tag.endswith("}Source")), ""))
+
+
+def news_from_yahoo_rss(ticker):
+    """Headlines from Yahoo Finance's own RSS feed for one ticker."""
+    resp = requests.get("https://feeds.finance.yahoo.com/rss/2.0/headline",
+                        params={"s": ticker, "region": "US", "lang": "en-US"},
+                        headers={"User-Agent": WEB_USER_AGENT}, timeout=12)
+    resp.raise_for_status()
+    return _rss_items(ticker, resp.content, "Yahoo Finance")
+
+
 def news_from_newsapi(key, ticker, name):
     """Headlines from NewsAPI for one holding. Raises on HTTP errors."""
     resp = requests.get("https://newsapi.org/v2/everything",
@@ -475,6 +570,12 @@ def fetch_news(state, force=False):
                 base = ticker.split(".")[0]
                 query = f'"{name}"' if "." in ticker else f'("{name}" OR {base})'
                 return label, news_from_google(ticker, query)
+            if label == "Bing News":
+                base = ticker.split(".")[0]
+                query = f'"{name}"' if "." in ticker else f'("{name}" OR {base})'
+                return label, news_from_bing(ticker, query)
+            if label == "Yahoo RSS":
+                return label, news_from_yahoo_rss(ticker)
             if label == "SEC":
                 return label, news_from_sec(state, ticker, ciks) if ciks else []
             if label == "Yahoo Finance":
@@ -484,7 +585,7 @@ def fetch_news(state, force=False):
             log_event("ERROR", label, f"{ticker}: {err}")
             return label, err
 
-    labels = ["Google News", "Yahoo Finance"] + (["SEC"] if ciks else []) + \
+    labels = ["Google News", "Bing News", "Yahoo Finance", "Yahoo RSS"] + (["SEC"] if ciks else []) + \
         (["NewsAPI"] if key else [])
     items = []
     with ThreadPoolExecutor(max_workers=8) as pool:
