@@ -613,6 +613,34 @@ def range_return(state, ticker, rng, data, last):
     return {"pct": (last / base - 1) * 100, "change": last - base, "since": base_date}
 
 
+@app.route("/_diag")
+def diag():
+    """TEMPORARY: what do Yahoo's endpoints return from this server? (no user data, no secrets)"""
+    if not DEMO:
+        abort(404)
+    import requests as rq
+    out = {}
+    ua = {"User-Agent": core.WEB_USER_AGENT}
+
+    def attempt(name, fn):
+        try:
+            out[name] = fn()
+        except Exception as err:
+            out[name] = f"ERR {type(err).__name__}: {str(err)[:200]}"
+
+    attempt("yfinance_version", lambda: __import__("yfinance").__version__)
+    attempt("info", lambda: {k: v for k, v in core.yf.Ticker("AAPL").info.items()
+                             if k in ("recommendationKey", "recommendationMean", "marketCap")})
+    attempt("recommendations_summary", lambda: core.yf.Ticker("AAPL").recommendations_summary.to_dict("records")[:1])
+    attempt("fc.yahoo.com", lambda: rq.get("https://fc.yahoo.com", headers=ua, timeout=10, allow_redirects=False).status_code)
+    attempt("getcrumb", lambda: (lambda r: [r.status_code, r.text[:80]])(
+        rq.get("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=ua, timeout=10)))
+    attempt("insights", lambda: (lambda r: [r.status_code, (r.json().get("finance", {}).get("result") or {}).get("recommendation")])(
+        rq.get("https://query1.finance.yahoo.com/ws/insights/v1/finance/insights", params={"symbol": "AAPL"}, headers=ua, timeout=10)))
+    attempt("server_ip_country", lambda: rq.get("https://ipinfo.io/json", timeout=8).json().get("country"))
+    return jsonify(out)
+
+
 @app.route("/security")
 def security():
     state = user_state()
