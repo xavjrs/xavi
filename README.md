@@ -3,6 +3,43 @@
 A personal portfolio dashboard: your holdings, how they're spread, and news about them.
 Information only - it never tells you to buy, sell or hold anything.
 
+## Try it live
+
+**[xavi-demo.onrender.com](https://xavi-demo.onrender.com)** - no sign-up. You get a private sample
+portfolio with live Yahoo Finance prices. Add, sell or edit anything and everything updates; your changes
+are private and deleted after 30 minutes of inactivity (or press **Reset sample**).
+
+- It runs on a free host, so the **first load can take up to a minute** while it wakes up.
+- Please use example holdings only, not your real ones.
+- Best on a desktop screen.
+- A few Yahoo fields (sector, beta, UK analyst ratings) can be blank online because Yahoo limits requests
+  from cloud servers. The downloadable version below has the full data.
+
+## Screenshots
+
+![Dashboard in light mode: total value, returns over time chart, allowance, holdings](docs/dashboard-light.png)
+*Dashboard: value, profit and return over time (built from your dated buys and sells), allowance and holdings.*
+
+![Dashboard in dark mode](docs/dashboard-dark.png)
+*Every page has light and dark mode.*
+
+![Security page: price, volume and drawdown charts, key stats, analyst consensus gauge](docs/security-analyst.png)
+*Security research for any ticker: price return for the chosen range, key stats and the analyst consensus
+(strong sell to strong buy). Analysts' views, not a recommendation.*
+
+![News feed with importance scores](docs/news.png)
+*News from several outlets, grouped by story and scored by importance. Only stories that name your company are shown.*
+
+## Download and run it yourself
+
+Two versions, same data and accounts:
+
+- **Desktop version** (Streamlit): download this repository (green **Code** button, then **Download ZIP**), install
+  Python, then double-click `start_app.bat`. There is also a terminal version, `portfolio_tracker.py`.
+- **Web version** (Flask, the one running in the live demo): double-click `start_web.bat`.
+
+Full steps are below. Your accounts and portfolio stay on your own computer.
+
 ## Run it
 
 1. Install Python 3.12 or newer from python.org.
