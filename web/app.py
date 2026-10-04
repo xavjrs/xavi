@@ -90,6 +90,17 @@ core.FETCH_RETRIES = 2
 core.RETRY_BACKOFF_SEC = 1
 core.notify = lambda message: app.logger.warning("core: %s", message)
 
+_original_log_event = core.log_event
+
+
+def _log_event(severity, component, message):
+    """Keep the log.txt line, and also print it so it shows up in the host's log viewer."""
+    _original_log_event(severity, component, message)
+    app.logger.warning("[%s] %s: %s", severity, component, message)
+
+
+core.log_event = _log_event
+
 PUBLIC_ENDPOINTS = {"login", "signup", "static"}
 RANGES = list(core.HISTORY_RANGES)
 CURRENCY_SYMBOL = {"USD": "$", "GBP": "£", "EUR": "€", "JPY": "¥", "CAD": "C$", "AUD": "A$"}
