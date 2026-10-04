@@ -57,7 +57,12 @@ SANDBOX_DIR = os.path.join(DATA_DIR, "sandboxes")
 SANDBOX_MINUTES = int(os.environ.get("XAVI_SANDBOX_MINUTES", "30"))
 MAX_SANDBOXES = int(os.environ.get("XAVI_MAX_SANDBOXES", "200"))
 MAX_HOLDINGS = 25                                   # per sandbox
-SAMPLE_HOLDINGS = (("AAPL", 10, 150.0), ("MSFT", 5, 320.0), ("BP.L", 50, 4.50), ("HSBA.L", 100, 7.00))
+# (ticker, shares, GBP cost per share ~ the real close on 2025-10-01, name, sector, region)
+SAMPLE_HOLDINGS = (
+    ("AAPL", 10, 189.41, "Apple Inc.", "Technology", "United States"),
+    ("MSFT", 5, 383.61, "Microsoft Corporation", "Technology", "United States"),
+    ("BP.L", 500, 4.28, "BP p.l.c.", "Energy", "United Kingdom"),
+    ("HSBA.L", 150, 10.50, "HSBC Holdings plc", "Financial Services", "United Kingdom"))
 _sandbox_lock = threading.Lock()
 
 app = Flask(__name__)
@@ -126,13 +131,14 @@ def seed_sample(folder):
     """Write the sample portfolio into `folder` (used for new sandboxes and 'Reset sample')."""
     os.makedirs(folder, exist_ok=True)
     state = {"portfolio": [], "cache": core.load_cache(), "config": core.load_config(folder), "dir": folder}
-    state["config"].update(cash=5000.0, isa_used=15000.0, display_name="Demo visitor")
+    state["config"].update(cash=5000.0, isa_used=12500.0, display_name="Demo visitor")
     core.save_config(state["config"], folder)
     core.save_portfolio([], folder)
     core.save_transactions([], folder)
-    for ticker, shares, price in SAMPLE_HOLDINGS:
+    for ticker, shares, price, name, sector, region in SAMPLE_HOLDINGS:
         core.add_position(state, ticker, shares, price, "sample holding", False, "2025-10-01",
                           skip_price_check=True)
+        core.update_position(state, ticker, name=name, sector=sector, region=region)
 
 
 def _expire_sandboxes():
