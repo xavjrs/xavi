@@ -10,7 +10,7 @@
 {% if stale %}<div class="warn">Some prices could not be refreshed, so weights use older data for those holdings.</div>{% endif %}
 
 {% if rows %}
-<div style="display:grid; grid-template-columns: 240px 1fr; gap:28px; align-items:center;">
+<div class="score-row">
     {{ tile("Diversification score", score|round|int, label, 'pos' if score >= 70 else ('neg' if score < 50 else ''), unit="/100") }}
     <div>
         {{ hbar("Score", score, '%d%%' % score, 'green' if score >= 70 else ('accent' if score >= 50 else 'red')) }}

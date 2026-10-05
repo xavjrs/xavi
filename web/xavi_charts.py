@@ -3,6 +3,9 @@
 They are drawn with CSS variables (var(--accent) etc.), so they follow the page's light / dark
 theme instantly. Hover tooltips are added by a few lines of JavaScript in base.html that read
 the data-chart attribute written here.
+
+Each chart can be drawn at desktop width (1000 units) or phone width (440 units, bigger relative
+text, fewer labels). `responsive()` writes both and CSS shows the one that fits the screen.
 """
 
 import json
@@ -12,7 +15,13 @@ from datetime import datetime
 from markupsafe import Markup, escape
 
 WIDTH = 1000
-PAD_L, PAD_R, PAD_T, PAD_B = 8, 74, 12, 28
+MOBILE_WIDTH = 440
+PAD_L, PAD_T, PAD_B = 8, 12, 28
+
+
+def pad_right(width):
+    """Room for the right-hand axis labels (less on a phone)."""
+    return 74 if width >= 700 else 54
 
 
 def nice_ticks(low, high, target=5):
@@ -63,13 +72,13 @@ def date_labels(dates, count=6):
     return out
 
 
-def _wrap(svg_body, height, xs, tips, label, ys=None):
+def _wrap(svg_body, height, xs, tips, label, ys=None, width=WIDTH):
     """Put the svg and tooltip container together. ys = y positions for the hover dot."""
-    data = json.dumps({"xs": xs, "tips": tips, "w": WIDTH, "h": height})
+    data = json.dumps({"xs": xs, "tips": tips, "w": width, "h": height})
     ys_attr = f' data-ys="{escape(json.dumps(ys))}"' if ys else ""
     return Markup(
         f'<div class="chart-wrap" data-chart="{escape(data)}"{ys_attr}>'
-        f'<svg class="chart" viewBox="0 0 {WIDTH} {height}" role="img" aria-label="{escape(label)}">'
+        f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" aria-label="{escape(label)}">'
         f'{svg_body}'
         f'<line class="xhair" x1="0" y1="{PAD_T}" x2="0" y2="{height - PAD_B}" visibility="hidden"/>'
         f'<circle class="dot" r="4.5" cx="0" cy="0" visibility="hidden"/></svg>'
@@ -77,22 +86,24 @@ def _wrap(svg_body, height, xs, tips, label, ys=None):
 
 
 def line_chart(dates, values, tips, *, height=300, kind="money", include_zero=False,
-               guide=None, area=True, colour="var(--accent)", label="chart"):
+               guide=None, area=True, colour="var(--accent)", label="chart", width=WIDTH):
     """A line (optionally filled) chart with a right-hand axis.
 
     guide: optional second series drawn as a dashed step line (e.g. money invested).
-    tips: one short text per point, shown on hover.
+    tips: one short text per point, shown on hover / touch.
     """
     n = len(values)
     if n < 2:
         return Markup('<div class="empty">Not enough data to draw a chart yet.</div>')
+    compact = width < 700
     series = values + (guide or [])
     low, high = min(series), max(series)
     if include_zero:
         low, high = min(low, 0), max(high, 0)
     pad = (high - low) * 0.06 or max(abs(high) * 0.05, 1)
     low, high = low - pad, high + pad
-    plot_w, plot_h = WIDTH - PAD_L - PAD_R, height - PAD_T - PAD_B
+    pad_r = pad_right(width)
+    plot_w, plot_h = width - PAD_L - pad_r, height - PAD_T - PAD_B
 
     def x(i):
         return PAD_L + i * plot_w / (n - 1)
@@ -101,15 +112,15 @@ def line_chart(dates, values, tips, *, height=300, kind="money", include_zero=Fa
         return PAD_T + (high - v) / (high - low) * plot_h
 
     parts = []
-    for tick in nice_ticks(low, high):
+    for tick in nice_ticks(low, high, 4 if compact else 5):
         ty = y(tick)
-        parts.append(f'<line class="grid" x1="{PAD_L}" x2="{WIDTH - PAD_R}" y1="{ty:.1f}" y2="{ty:.1f}"/>'
-                     f'<text class="ylab" x="{WIDTH - PAD_R + 8}" y="{ty + 4:.1f}">{escape(fmt_axis(tick, kind))}</text>')
-    for i, text in date_labels(dates):
+        parts.append(f'<line class="grid" x1="{PAD_L}" x2="{width - pad_r}" y1="{ty:.1f}" y2="{ty:.1f}"/>'
+                     f'<text class="ylab" x="{width - pad_r + 6}" y="{ty + 4:.1f}">{escape(fmt_axis(tick, kind))}</text>')
+    for i, text in date_labels(dates, 4 if compact else 6):
         anchor = "start" if i == 0 else ("end" if i == n - 1 else "middle")
         parts.append(f'<text class="xlab" x="{x(i):.1f}" y="{height - 8}" text-anchor="{anchor}">{escape(text)}</text>')
     if include_zero and low < 0 < high:
-        parts.append(f'<line class="zero" x1="{PAD_L}" x2="{WIDTH - PAD_R}" y1="{y(0):.1f}" y2="{y(0):.1f}"/>')
+        parts.append(f'<line class="zero" x1="{PAD_L}" x2="{width - pad_r}" y1="{y(0):.1f}" y2="{y(0):.1f}"/>')
     line = " ".join(f"{'M' if i == 0 else 'L'}{x(i):.1f},{y(v):.1f}" for i, v in enumerate(values))
     if area:
         base = y(0) if (include_zero and low < 0 < high) else PAD_T + plot_h
@@ -123,22 +134,23 @@ def line_chart(dates, values, tips, *, height=300, kind="money", include_zero=Fa
     parts.append(f'<path class="line" d="{line}" style="stroke:{colour}"/>')
     xs = [round(x(i), 1) for i in range(n)]
     ys = [round(y(v), 1) for v in values]
-    return _wrap("".join(parts), height, xs, [f"{t}" for t in tips], label, ys)
+    return _wrap("".join(parts), height, xs, [f"{t}" for t in tips], label, ys, width)
 
 
-def bar_chart(dates, values, tips, *, height=80, kind="volume", label="bars"):
+def bar_chart(dates, values, tips, *, height=80, kind="volume", label="bars", width=WIDTH):
     """Vertical bars (for volume)."""
     n = len(values)
     if n < 2:
         return Markup("")
     high = max(values) * 1.08 or 1
-    plot_w, plot_h = WIDTH - PAD_L - PAD_R, height - PAD_T - 6
+    pad_r = pad_right(width)
+    plot_w, plot_h = width - PAD_L - pad_r, height - PAD_T - 6
     bar_w = max(plot_w / n * 0.7, 1)
     parts = []
     for tick in nice_ticks(0, high, 3):
         ty = PAD_T + (high - tick) / high * plot_h
-        parts.append(f'<line class="grid" x1="{PAD_L}" x2="{WIDTH - PAD_R}" y1="{ty:.1f}" y2="{ty:.1f}"/>'
-                     f'<text class="ylab" x="{WIDTH - PAD_R + 8}" y="{ty + 4:.1f}">{escape(fmt_axis(tick, kind))}</text>')
+        parts.append(f'<line class="grid" x1="{PAD_L}" x2="{width - pad_r}" y1="{ty:.1f}" y2="{ty:.1f}"/>'
+                     f'<text class="ylab" x="{width - pad_r + 6}" y="{ty + 4:.1f}">{escape(fmt_axis(tick, kind))}</text>')
     xs = []
     for i, v in enumerate(values):
         cx = PAD_L + i * plot_w / (n - 1)
@@ -146,8 +158,23 @@ def bar_chart(dates, values, tips, *, height=80, kind="volume", label="bars"):
         xs.append(round(cx, 1))
         parts.append(f'<rect class="bar" x="{cx - bar_w / 2:.1f}" y="{PAD_T + plot_h - h:.1f}" '
                      f'width="{bar_w:.1f}" height="{max(h, 0.5):.1f}"/>')
-    data = json.dumps({"xs": xs, "tips": tips, "w": WIDTH, "h": height})
+    data = json.dumps({"xs": xs, "tips": tips, "w": width, "h": height})
     return Markup(f'<div class="chart-wrap" data-chart="{escape(data)}" data-nodot="1">'
-                  f'<svg class="chart" viewBox="0 0 {WIDTH} {height}" role="img" aria-label="{escape(label)}">'
+                  f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" aria-label="{escape(label)}">'
                   f'{"".join(parts)}<line class="xhair" x1="0" y1="{PAD_T}" x2="0" y2="{height - 6}" '
                   f'visibility="hidden"/></svg><div class="chart-tip" hidden></div></div>')
+
+
+def responsive(chart, dates, values, tips, *, mobile_height=None, **kwargs):
+    """Both widths of one chart. CSS (.chart-desktop / .chart-mobile) shows the one that fits.
+
+    `chart` is line_chart or bar_chart. mobile_height defaults to the desktop height.
+    """
+    big = chart(dates, values, tips, **kwargs)
+    if 'class="chart-wrap"' not in str(big):             # "not enough data" message or empty
+        return big
+    small_kwargs = dict(kwargs, width=MOBILE_WIDTH)
+    if mobile_height:
+        small_kwargs["height"] = mobile_height
+    small = chart(dates, values, tips, **small_kwargs)
+    return Markup(f'<div class="chart-desktop">{big}</div><div class="chart-mobile">{small}</div>')

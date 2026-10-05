@@ -11,7 +11,8 @@ are private and deleted after 30 minutes of inactivity (or press **Reset sample*
 
 - It runs on a free host, so the **first load can take up to a minute** while it wakes up.
 - Please use example holdings only, not your real ones.
-- Best on a desktop screen.
+- Works on phones and tablets as well as desktop: on a small screen the sidebar becomes a Menu button with a
+  bottom tab bar, tables turn into cards, and the charts redraw at phone width (touch a chart to see values).
 - A few Yahoo fields (sector, beta, UK analyst ratings) can be blank online because Yahoo limits requests
   from cloud servers. The downloadable version below has the full data.
 

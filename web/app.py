@@ -394,14 +394,14 @@ def timeline_chart(timeline, metric):
     tips = [f"{core.fmt_date(d)} · value £{v:,.2f} · net invested £{i:,.2f} · profit "
             f"{p:+,.2f} ({r:+.2f}%)" for d, v, i, p, r in zip(dates, value, invested, profit, ret)]
     if metric == "value":
-        series, svg = value, charts.line_chart(dates, value, tips, guide=invested, kind="money",
-                                               label="Value of holdings over time")
+        series, svg = value, charts.responsive(charts.line_chart, dates, value, tips, mobile_height=270,
+                                               guide=invested, kind="money", label="Value of holdings over time")
     elif metric == "return":
-        series, svg = ret, charts.line_chart(dates, ret, tips, kind="pct", include_zero=True,
-                                             label="Total return over time")
+        series, svg = ret, charts.responsive(charts.line_chart, dates, ret, tips, mobile_height=270,
+                                             kind="pct", include_zero=True, label="Total return over time")
     else:
-        series, svg = profit, charts.line_chart(dates, profit, tips, kind="money", include_zero=True,
-                                                label="Total profit over time")
+        series, svg = profit, charts.responsive(charts.line_chart, dates, profit, tips, mobile_height=270,
+                                                kind="money", include_zero=True, label="Total profit over time")
     hi, lo = series.index(max(series)), series.index(min(series))
     return svg, {"hi": series[hi], "hi_date": dates[hi], "lo": series[lo], "lo_date": dates[lo]}
 
@@ -662,11 +662,14 @@ def security():
         sym = symbol
         tips = [f"{core.fmt_date(d)} · {sym}{c:,.2f} · {dd:+.1f}% from peak" for d, c, dd in zip(dates, close, draw)]
         charts_html = {
-            "price": charts.line_chart(dates, close, tips, height=300, label=f"{ticker} price"),
-            "volume": charts.bar_chart(dates, volume, [f"{core.fmt_date(d)} · volume {v:,}" for d, v in zip(dates, volume)],
-                                       label=f"{ticker} volume"),
-            "drawdown": charts.line_chart(dates, draw, tips, height=120, kind="pct", include_zero=True,
-                                          colour="var(--red)", label=f"{ticker} drawdown from peak")}
+            "price": charts.responsive(charts.line_chart, dates, close, tips, height=300, mobile_height=270,
+                                       label=f"{ticker} price"),
+            "volume": charts.responsive(charts.bar_chart, dates, volume,
+                                        [f"{core.fmt_date(d)} · volume {v:,}" for d, v in zip(dates, volume)],
+                                        mobile_height=90, label=f"{ticker} volume"),
+            "drawdown": charts.responsive(charts.line_chart, dates, draw, tips, height=120, mobile_height=150,
+                                          kind="pct", include_zero=True, colour="var(--red)",
+                                          label=f"{ticker} drawdown from peak")}
     ctx.update(info=info, held=held, holding=holding, symbol=symbol, ccy=ccy, last=last,
                change=change, change_pct=(change / prev * 100) if change is not None and prev else None,
                last_date=recent["dates"][-1] if recent else None, earnings=earnings,

@@ -3,7 +3,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=1180">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#15803d">
     <title>{% block title %}XAVI{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,25 +22,29 @@
 <body>
 {% if session.get('username') %}
 <div class="app">
-    <aside class="sidebar">
-        <div class="side-logo">{{ wordmark(22) }}</div>
+    <aside class="sidebar" id="sidebar">
+        <div class="side-head">
+            <div class="side-logo">{{ wordmark(22) }}</div>
+            <button type="button" class="menu-toggle btn btn-small" id="menu-toggle" aria-expanded="false"
+                    aria-controls="side-top side-bottom">Menu</button>
+        </div>
 
+        <div class="side-more" id="side-top">
         <form class="search" action="{{ url_for('security') }}" method="get">
             <input type="text" name="ticker" placeholder="Search a ticker  (AAPL, BP.L)" aria-label="Search a ticker"
                    autocomplete="off" pattern="[A-Za-z0-9.\-]{1,10}" title="1-10 letters or numbers, e.g. AAPL or BP.L">
         </form>
+        </div>
 
-        <div class="side-label">Navigate</div>
+        <div class="side-label nav-label">Navigate</div>
         <nav class="nav" aria-label="Main">
             {% set ep = request.endpoint %}
-            <a href="{{ url_for('dashboard') }}" class="{{ 'active' if ep == 'dashboard' }}" {% if ep == 'dashboard' %}aria-current="page"{% endif %}>▣   Dashboard</a>
-            <a href="{{ url_for('history') }}" class="{{ 'active' if ep == 'history' }}" {% if ep == 'history' %}aria-current="page"{% endif %}>▤   History</a>
-            <a href="{{ url_for('analysis') }}" class="{{ 'active' if ep == 'analysis' }}" {% if ep == 'analysis' %}aria-current="page"{% endif %}>◧   Analysis</a>
-            <a href="{{ url_for('news') }}" class="{{ 'active' if ep == 'news' }}" {% if ep == 'news' %}aria-current="page"{% endif %}>◈   News</a>
-            <a href="{{ url_for('security') }}" class="{{ 'active' if ep == 'security' }}" {% if ep == 'security' %}aria-current="page"{% endif %}>◎   Security</a>
-            <a href="{{ url_for('settings') }}" class="{{ 'active' if ep == 'settings' }}" {% if ep == 'settings' %}aria-current="page"{% endif %}>⚙   Settings</a>
+            {% for endpoint, glyph, label in (('dashboard', '▣', 'Dashboard'), ('history', '▤', 'History'), ('analysis', '◧', 'Analysis'), ('news', '◈', 'News'), ('security', '◎', 'Security'), ('settings', '⚙', 'Settings')) %}
+            <a href="{{ url_for(endpoint) }}" class="{{ 'active' if ep == endpoint }}" {% if ep == endpoint %}aria-current="page"{% endif %}><span class="ico" aria-hidden="true">{{ glyph }}</span><span class="lbl">{{ label }}</span></a>
+            {% endfor %}
         </nav>
 
+        <div class="side-more" id="side-bottom">
         <div class="side-label">Allowance</div>
         {{ hbar(side_label, side_allowance_pct, '%.0f%% used' % side_allowance_pct, 'blue') }}
         <div class="side-note">£{{ '{:,.2f}'.format(side_allowance_left) }} left of £{{ '{:,.2f}'.format(side_allowance_total) }}</div>
@@ -62,6 +67,7 @@
             <button type="submit" class="btn btn-small">Log out</button>
         </form>
         {% endif %}
+        </div>
     </aside>
 
     <main class="main">
@@ -70,7 +76,7 @@
                 <div class="page-title">{% block page_title %}{% endblock %}</div>
                 <div class="meta">{{ side_label }} · GBP · {{ now.strftime('%d %b %Y, %H:%M') }}</div>
             </div>
-            <div>{{ wordmark(24) }}</div>
+            <div class="topbar-logo">{{ wordmark(24) }}</div>
             <div></div>
         </div>
 
@@ -102,7 +108,7 @@
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
-            <div class="alert alert-{{ category }}" style="width:400px" role="status">{{ message }}</div>
+            <div class="alert alert-{{ category }} auth-alert" role="status">{{ message }}</div>
         {% endfor %}
     {% endwith %}
 
@@ -136,14 +142,17 @@
         mark();
     })();
 
-    /* ---- chart hover: crosshair, dot and tooltip ---- */
+    /* ---- chart hover / touch: crosshair, dot and tooltip (mouse, finger or pen) ---- */
+    var chartHiders = [];
     document.querySelectorAll('.chart-wrap').forEach(function (wrap) {
         var spec = JSON.parse(wrap.getAttribute('data-chart'));
         var ys = wrap.getAttribute('data-ys'); ys = ys ? JSON.parse(ys) : null;
         var svg = wrap.querySelector('svg'), tip = wrap.querySelector('.chart-tip');
         var line = svg.querySelector('.xhair'), dot = svg.querySelector('.dot');
-        wrap.addEventListener('mousemove', function (event) {
-            var box = svg.getBoundingClientRect(), x = (event.clientX - box.left) / box.width * spec.w;
+        function show(event) {
+            var box = svg.getBoundingClientRect();
+            if (!box.width) { return; }
+            var x = (event.clientX - box.left) / box.width * spec.w;
             var lo = 0, hi = spec.xs.length - 1;
             while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (spec.xs[mid] <= x) lo = mid; else hi = mid; }
             var i = Math.abs(spec.xs[lo] - x) <= Math.abs(spec.xs[hi] - x) ? lo : hi;
@@ -151,12 +160,31 @@
             if (dot && ys) { dot.setAttribute('cx', spec.xs[i]); dot.setAttribute('cy', ys[i]); dot.setAttribute('visibility', 'visible'); }
             tip.textContent = spec.tips[i]; tip.hidden = false;
             var px = spec.xs[i] / spec.w * box.width;
-            tip.style.left = Math.min(Math.max(px - tip.offsetWidth / 2, 0), box.width - tip.offsetWidth) + 'px';
-        });
-        wrap.addEventListener('mouseleave', function () {
+            tip.style.left = Math.max(0, Math.min(px - tip.offsetWidth / 2, box.width - tip.offsetWidth)) + 'px';
+        }
+        function hide() {
             line.setAttribute('visibility', 'hidden'); if (dot) dot.setAttribute('visibility', 'hidden'); tip.hidden = true;
-        });
+        }
+        wrap.addEventListener('pointermove', show);
+        wrap.addEventListener('pointerdown', show);
+        wrap.addEventListener('pointerleave', function (event) { if (event.pointerType === 'mouse') { hide(); } });
+        chartHiders.push([wrap, hide]);
     });
+    /* on a touch screen the tooltip stays after you lift your finger; tapping elsewhere clears it */
+    document.addEventListener('pointerdown', function (event) {
+        chartHiders.forEach(function (pair) { if (!pair[0].contains(event.target)) { pair[1](); } });
+    });
+
+    /* ---- phone layout: the Menu button shows / hides search, allowance, appearance ---- */
+    (function () {
+        var button = document.getElementById('menu-toggle'), side = document.getElementById('sidebar');
+        if (!button || !side) { return; }
+        button.addEventListener('click', function () {
+            var open = side.classList.toggle('open');
+            button.setAttribute('aria-expanded', open ? 'true' : 'false');
+            button.textContent = open ? 'Close' : 'Menu';
+        });
+    })();
 </script>
 </body>
 </html>

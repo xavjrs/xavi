@@ -5,7 +5,7 @@
 {% block page_title %}Transaction history{% endblock %}
 
 {% block content %}
-<div class="tiles" style="grid-template-columns: repeat(5, 1fr)">
+<div class="tiles tiles-5">
     {{ tile("Realised P&L", money(m.realised_pl, True), "from sales", 'pos' if m.realised_pl > 0 else ('neg' if m.realised_pl < 0 else '')) }}
     {{ tile("Unrealised P&L", money(m.pl, True), "on holdings", 'pos' if m.pl > 0 else ('neg' if m.pl < 0 else '')) }}
     {{ tile("Total bought", money(bought), "incl. fees") }}
@@ -21,29 +21,29 @@
     <a href="{{ url_for('history', sort='ticker') }}" class="{{ 'active-link' if order == 'ticker' }}">by ticker</a> ·
     <a href="{{ url_for('export_csv', kind='transactions') }}">Download CSV</a></div>
 {% if txs %}
-<div class="table-wrap">
-    <table class="data">
+<div class="table-wrap cards">
+    <table class="data stack">
         <thead><tr><th class="num">#</th><th>Date</th><th>Ticker</th><th>Type</th><th class="num">Shares</th><th class="num">Price £</th>
             <th class="num">Fees £</th><th class="num">Total £</th><th class="num">Realised £</th><th>Notes</th></tr></thead>
         <tbody>
         {% for t in txs[:200] %}
             <tr>
-                <td class="num">{{ t.id }}</td>
-                <td>
+                <td class="num" data-label="#">{{ t.id }}</td>
+                <td class="full">
                     <form method="POST" action="{{ url_for('transactions_date', tx_id=t.id) }}" class="inline-form compact">
                         {{ csrf_input() }}
                         <input type="date" name="date" value="{{ t.date }}" max="{{ today }}" aria-label="Date of transaction {{ t.id }}">
                         <button class="btn btn-small" type="submit">Save</button>
                     </form>
                 </td>
-                <td class="ticker">{{ t.ticker }}</td>
-                <td><span class="badge {{ 'badge-sell' if t.type == 'SELL' else '' }}">{{ t.type }}</span>{% if t.get('historical') %} <span class="sub">closed trade</span>{% endif %}</td>
-                <td class="num">{{ '{:,.4g}'.format(t.shares) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(t.price) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(t.fees) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(t.total) }}</td>
-                <td class="num {{ 'pos' if t.get('realised_pl', 0) > 0 else ('neg' if t.get('realised_pl', 0) < 0 else '') }}">{{ ('%+.2f' % t.realised_pl) if t.type == 'SELL' else '' }}</td>
-                <td>{{ t.notes }}</td>
+                <td class="ticker" data-label="Ticker">{{ t.ticker }}</td>
+                <td data-label="Type"><span class="badge {{ 'badge-sell' if t.type == 'SELL' else '' }}">{{ t.type }}</span>{% if t.get('historical') %} <span class="sub">closed trade</span>{% endif %}</td>
+                <td class="num" data-label="Shares">{{ '{:,.4g}'.format(t.shares) }}</td>
+                <td class="num" data-label="Price £">{{ '{:,.2f}'.format(t.price) }}</td>
+                <td class="num" data-label="Fees £">{{ '{:,.2f}'.format(t.fees) }}</td>
+                <td class="num" data-label="Total £">{{ '{:,.2f}'.format(t.total) }}</td>
+                <td class="num {{ 'pos' if t.get('realised_pl', 0) > 0 else ('neg' if t.get('realised_pl', 0) < 0 else '') }}" data-label="Realised £">{{ ('%+.2f' % t.realised_pl) if t.type == 'SELL' else '—' }}</td>
+                <td class="full">{{ t.notes }}</td>
             </tr>
         {% endfor %}
         </tbody>
@@ -56,17 +56,17 @@
 <div class="section">Closed positions</div>
 <div class="note">Every sale: when it was opened and closed, and the return.</div>
 {% if closed %}
-<div class="table-wrap">
-    <table class="data">
+<div class="table-wrap cards">
+    <table class="data stack">
         <thead><tr><th>Ticker</th><th>Opened</th><th>Closed</th><th class="num">Days</th><th class="num">Shares</th>
             <th class="num">Cost £</th><th class="num">Proceeds £</th><th class="num">Profit £</th><th class="num">Return</th></tr></thead>
         <tbody>
         {% for c in closed[:40] %}
-            <tr><td class="ticker">{{ c.ticker }}</td><td>{{ c.opened or '—' }}</td><td>{{ c.closed }}</td>
-                <td class="num">{{ c.days if c.days is not none else '—' }}</td><td class="num">{{ '{:,.4g}'.format(c.shares) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(c.cost) }}</td><td class="num">{{ '{:,.2f}'.format(c.proceeds) }}</td>
-                <td class="num {{ 'pos' if c.profit > 0 else ('neg' if c.profit < 0 else '') }}">{{ '%+.2f' % c.profit }}</td>
-                <td class="num {{ 'pos' if (c.return_pct or 0) > 0 else ('neg' if (c.return_pct or 0) < 0 else '') }}">{{ ('%+.2f%%' % c.return_pct) if c.return_pct is not none else '—' }}</td></tr>
+            <tr><td class="ticker full">{{ c.ticker }}</td><td data-label="Opened">{{ c.opened or '—' }}</td><td data-label="Closed">{{ c.closed }}</td>
+                <td class="num" data-label="Days">{{ c.days if c.days is not none else '—' }}</td><td class="num" data-label="Shares">{{ '{:,.4g}'.format(c.shares) }}</td>
+                <td class="num" data-label="Cost £">{{ '{:,.2f}'.format(c.cost) }}</td><td class="num" data-label="Proceeds £">{{ '{:,.2f}'.format(c.proceeds) }}</td>
+                <td class="num {{ 'pos' if c.profit > 0 else ('neg' if c.profit < 0 else '') }}" data-label="Profit £">{{ '%+.2f' % c.profit }}</td>
+                <td class="num {{ 'pos' if (c.return_pct or 0) > 0 else ('neg' if (c.return_pct or 0) < 0 else '') }}" data-label="Return">{{ ('%+.2f%%' % c.return_pct) if c.return_pct is not none else '—' }}</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -106,16 +106,16 @@
 <div class="note">What the ledger says you paid vs the cost on each holding. "differs" means a holding was edited by hand or
     entered before the ledger existed. Sales use FIFO (oldest shares first).</div>
 {% if checks %}
-<div class="table-wrap">
-    <table class="data">
+<div class="table-wrap cards">
+    <table class="data stack">
         <thead><tr><th>Ticker</th><th class="num">Bought £</th><th class="num">Cost of sold £</th><th class="num">Ledger left £</th>
             <th class="num">Holding cost £</th><th class="num">Difference £</th><th>Status</th></tr></thead>
         <tbody>
         {% for c in checks %}
-            <tr><td class="ticker">{{ c.ticker }}</td><td class="num">{{ '{:,.2f}'.format(c.bought) }}</td><td class="num">{{ '{:,.2f}'.format(c.sold_cost) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(c.ledger_remaining) }}</td><td class="num">{{ '{:,.2f}'.format(c.holding_cost) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(0 if c.difference|abs < 0.005 else c.difference) }}</td>
-                <td>{% if not c.has_ledger %}<span class="badge">no ledger</span>{% elif c.difference|abs < 0.01 %}<span class="badge">matches</span>{% else %}<span class="badge badge-warn">differs</span>{% endif %}</td></tr>
+            <tr><td class="ticker full">{{ c.ticker }}</td><td class="num" data-label="Bought £">{{ '{:,.2f}'.format(c.bought) }}</td><td class="num" data-label="Cost of sold £">{{ '{:,.2f}'.format(c.sold_cost) }}</td>
+                <td class="num" data-label="Ledger left £">{{ '{:,.2f}'.format(c.ledger_remaining) }}</td><td class="num" data-label="Holding cost £">{{ '{:,.2f}'.format(c.holding_cost) }}</td>
+                <td class="num" data-label="Difference £">{{ '{:,.2f}'.format(0 if c.difference|abs < 0.005 else c.difference) }}</td>
+                <td data-label="Status">{% if not c.has_ledger %}<span class="badge">no ledger</span>{% elif c.difference|abs < 0.01 %}<span class="badge">matches</span>{% else %}<span class="badge badge-warn">differs</span>{% endif %}</td></tr>
         {% endfor %}
         </tbody>
     </table>

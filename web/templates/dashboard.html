@@ -76,8 +76,8 @@
 <div class="section">Holdings</div>
 <div class="note">Costs and prices are in £ per share. Weights are % of total value including cash. Sector and region are labels you can edit.</div>
 {% if rows %}
-<div class="table-wrap">
-    <table class="data">
+<div class="table-wrap cards">
+    <table class="data stack">
         <thead>
             <tr>
                 <th>Holding</th><th class="num">Shares</th><th class="num">Avg cost £</th>
@@ -88,15 +88,15 @@
         <tbody>
             {% for r in rows %}
             <tr>
-                <td><span class="ticker">{{ r.ticker }}</span><br><span class="sub">{{ r.name }} · {{ r.sector }} · {{ r.region }}</span></td>
-                <td class="num">{{ '{:,.4g}'.format(r.shares) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(r.avg_cost) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(r.price) if not r.no_price else '—' }}</td>
-                <td class="num">{{ '{:,.2f}'.format(r.value) }}</td>
-                <td class="num {{ 'pos' if r.pl > 0 else ('neg' if r.pl < 0 else '') }}">{{ '%+.2f' % r.pl }}</td>
-                <td class="num {{ 'pos' if (r.pl_pct or 0) > 0 else ('neg' if (r.pl_pct or 0) < 0 else '') }}">{{ ('%+.2f%%' % r.pl_pct) if r.pl_pct is not none else '—' }}</td>
-                <td class="num">{{ '%.1f%%' % r.weight }}</td>
-                <td>{% if r.stale %}<span class="badge badge-warn">stale</span>{% else %}<span class="badge">live</span>{% endif %}</td>
+                <td class="full"><span class="ticker">{{ r.ticker }}</span><br><span class="sub">{{ r.name }} · {{ r.sector }} · {{ r.region }}</span></td>
+                <td class="num" data-label="Shares">{{ '{:,.4g}'.format(r.shares) }}</td>
+                <td class="num" data-label="Avg cost £">{{ '{:,.2f}'.format(r.avg_cost) }}</td>
+                <td class="num" data-label="Price £">{{ '{:,.2f}'.format(r.price) if not r.no_price else '—' }}</td>
+                <td class="num" data-label="Value £">{{ '{:,.2f}'.format(r.value) }}</td>
+                <td class="num {{ 'pos' if r.pl > 0 else ('neg' if r.pl < 0 else '') }}" data-label="P/L £">{{ '%+.2f' % r.pl }}</td>
+                <td class="num {{ 'pos' if (r.pl_pct or 0) > 0 else ('neg' if (r.pl_pct or 0) < 0 else '') }}" data-label="P/L %">{{ ('%+.2f%%' % r.pl_pct) if r.pl_pct is not none else '—' }}</td>
+                <td class="num" data-label="Weight">{{ '%.1f%%' % r.weight }}</td>
+                <td data-label="Data">{% if r.stale %}<span class="badge badge-warn">stale</span>{% else %}<span class="badge">live</span>{% endif %}</td>
                 <td class="num actions">
                     <button type="button" class="btn btn-small" data-edit
                         data-ticker="{{ r.ticker }}" data-name="{{ r.name }}" data-shares="{{ r.shares }}"
@@ -119,17 +119,17 @@
 {% if closed %}
 <div class="section">Closed positions</div>
 <div class="note">Every sale: when it was opened and closed, and the return.</div>
-<div class="table-wrap">
-    <table class="data">
+<div class="table-wrap cards">
+    <table class="data stack">
         <thead><tr><th>Ticker</th><th>Opened</th><th>Closed</th><th class="num">Days</th><th class="num">Shares</th>
             <th class="num">Cost £</th><th class="num">Proceeds £</th><th class="num">Profit £</th><th class="num">Return</th></tr></thead>
         <tbody>
         {% for c in closed[:12] %}
-            <tr><td class="ticker">{{ c.ticker }}</td><td>{{ c.opened or '—' }}</td><td>{{ c.closed }}</td>
-                <td class="num">{{ c.days if c.days is not none else '—' }}</td><td class="num">{{ '{:,.4g}'.format(c.shares) }}</td>
-                <td class="num">{{ '{:,.2f}'.format(c.cost) }}</td><td class="num">{{ '{:,.2f}'.format(c.proceeds) }}</td>
-                <td class="num {{ 'pos' if c.profit > 0 else ('neg' if c.profit < 0 else '') }}">{{ '%+.2f' % c.profit }}</td>
-                <td class="num {{ 'pos' if (c.return_pct or 0) > 0 else ('neg' if (c.return_pct or 0) < 0 else '') }}">{{ ('%+.2f%%' % c.return_pct) if c.return_pct is not none else '—' }}</td></tr>
+            <tr><td class="ticker full">{{ c.ticker }}</td><td data-label="Opened">{{ c.opened or '—' }}</td><td data-label="Closed">{{ c.closed }}</td>
+                <td class="num" data-label="Days">{{ c.days if c.days is not none else '—' }}</td><td class="num" data-label="Shares">{{ '{:,.4g}'.format(c.shares) }}</td>
+                <td class="num" data-label="Cost £">{{ '{:,.2f}'.format(c.cost) }}</td><td class="num" data-label="Proceeds £">{{ '{:,.2f}'.format(c.proceeds) }}</td>
+                <td class="num {{ 'pos' if c.profit > 0 else ('neg' if c.profit < 0 else '') }}" data-label="Profit £">{{ '%+.2f' % c.profit }}</td>
+                <td class="num {{ 'pos' if (c.return_pct or 0) > 0 else ('neg' if (c.return_pct or 0) < 0 else '') }}" data-label="Return">{{ ('%+.2f%%' % c.return_pct) if c.return_pct is not none else '—' }}</td></tr>
         {% endfor %}
         </tbody>
     </table>

@@ -50,7 +50,7 @@
     <div class="empty">Price history isn't available for this range right now.</div>
 {% endif %}
 
-<div class="tiles" style="grid-template-columns: repeat(6, 1fr); margin-top:22px">
+<div class="tiles" style="margin-top:22px">
     {{ tile("Market cap", human(info.marketCap) if info.get('marketCap') else '—', info.get('currency') or '') }}
     {{ tile("P/E", '%.1f' % info.trailingPE if info.get('trailingPE') else '—', "trailing") }}
     {{ tile("Forward P/E", '%.1f' % info.forwardPE if info.get('forwardPE') else '—', "expected") }}
