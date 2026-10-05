@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Offline - XAVI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="auth-logo">XAVI</div>
+    <div class="auth-card">
+        <h2>You're offline</h2>
+        <p class="note">XAVI needs an internet connection for live prices, news and your portfolio.
+            Check your connection, then try again.</p>
+        <button type="button" class="btn btn-primary btn-block" onclick="location.reload()">Try again</button>
+    </div>
+</div>
+</body>
+</html>

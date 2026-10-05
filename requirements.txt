@@ -1,5 +1,8 @@
-streamlit
-flask
-yfinance
-requests
-tzdata
+# Everything needed to run any version of XAVI (desktop dashboard, web app, terminal).
+# Each line: tested version as the minimum, next major version as the ceiling, so a future
+# breaking release can't silently break a fresh install.
+streamlit>=1.64,<2
+flask>=2.3,<4
+yfinance>=1.7,<2
+requests>=2.32,<3
+tzdata>=2025.1

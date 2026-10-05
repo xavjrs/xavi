@@ -28,7 +28,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.environ.setdefault("ISA_USERS_DIR", os.path.join(DATA_DIR, "accounts"))   # before importing auth
 
 from flask import (Flask, Response, abort, flash, jsonify, redirect, render_template, request,
-                   session, url_for)
+                   send_from_directory, session, url_for)
 from markupsafe import Markup
 
 import auth
@@ -102,6 +102,8 @@ def _log_event(severity, component, message):
 core.log_event = _log_event
 
 PUBLIC_ENDPOINTS = {"login", "signup", "static"}
+# files the browser fetches on its own to make the site installable: no login, no sandbox, no rate limit
+OPEN_ENDPOINTS = {"static", "pwa_manifest", "service_worker", "offline"}
 RANGES = list(core.HISTORY_RANGES)
 CURRENCY_SYMBOL = {"USD": "$", "GBP": "£", "EUR": "€", "JPY": "¥", "CAD": "C$", "AUD": "A$"}
 
@@ -211,7 +213,7 @@ def rate_limited(key, calls, seconds):
 @app.before_request
 def gate():
     """Rate limit and CSRF check, then make sure there is a signed-in user (or demo sandbox)."""
-    if request.endpoint != "static":
+    if request.endpoint not in OPEN_ENDPOINTS:
         who = request.remote_addr or "?"
         rule = RATE_RULES.get(request.endpoint)
         if (DEMO and rate_limited(("all", who), *RATE_ALL)) or \
@@ -223,7 +225,7 @@ def gate():
         if not sent or not secrets.compare_digest(sent, session.get("_csrf", "")):
             abort(400, "Your session expired or the form was out of date. Go back, reload the "
                        "page and try again.")
-    if request.endpoint == "static":
+    if request.endpoint in OPEN_ENDPOINTS:
         return None
     if DEMO:
         if request.endpoint in ("login", "signup"):
@@ -366,6 +368,37 @@ def signup():
             flash(message, "error")
         return redirect(url_for("signup"))
     return render_template("signup.html", no_recovery=auth.NO_RECOVERY)
+
+
+# ---------------------------------------------------------------------------------------------
+# installable app (PWA): manifest, service worker and offline page
+# ---------------------------------------------------------------------------------------------
+@app.route("/manifest.webmanifest")
+def pwa_manifest():
+    icons = [{"src": url_for("static", filename=f"icons/{name}"), "sizes": size, "type": "image/png",
+              "purpose": purpose}
+             for name, size, purpose in (("icon-192.png", "192x192", "any"), ("icon-512.png", "512x512", "any"),
+                                         ("icon-maskable-512.png", "512x512", "maskable"))]
+    manifest = {"id": "/", "name": "XAVI - portfolio dashboard", "short_name": "XAVI",
+                "description": "UK Stocks & Shares ISA portfolio dashboard. Information only, not financial advice.",
+                "start_url": "/", "scope": "/", "display": "standalone", "orientation": "portrait-primary",
+                "background_color": "#f3faf5", "theme_color": "#15803d", "icons": icons}
+    return Response(json.dumps(manifest), mimetype="application/manifest+json",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Served from the site root so it can control every page. Never cached, so updates arrive at once."""
+    response = send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
+
+
+@app.route("/offline")
+def offline():
+    return render_template("offline.html")
 
 
 @app.route("/logout", methods=["POST"])

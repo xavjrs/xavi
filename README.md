@@ -31,39 +31,49 @@ are private and deleted after 30 minutes of inactivity (or press **Reset sample*
 ![News feed with importance scores](docs/news.png)
 *News from several outlets, grouped by story and scored by importance. Only stories that name your company are shown.*
 
+## Install it on your phone
+
+Open the live demo in your phone's browser, then:
+
+- **iPhone (Safari):** tap Share, then **Add to Home Screen**.
+- **Android (Chrome):** tap **Install app** in the Menu (or Chrome's menu, then **Install app**).
+
+It opens full-screen with the XAVI icon, like a normal app. It still needs an internet connection for live data.
+
 ## Download and run it yourself
 
-Two versions, same data and accounts:
+Download this repository (green **Code** button, then **Download ZIP**, and unzip it). You need
+[Python](https://www.python.org/downloads/) 3.10 or newer. Then:
 
-- **Desktop version** (Streamlit): download this repository (green **Code** button, then **Download ZIP**), install
-  Python, then double-click `start_app.bat`. There is also a terminal version, `portfolio_tracker.py`.
-- **Web version** (Flask, the one running in the live demo): double-click `start_web.bat`.
+| | Windows | Mac / Linux |
+|---|---|---|
+| **Web version** (the one running in the live demo) | double-click `start_web.bat` | `sh start_web.sh` |
+| **Desktop dashboard** (Streamlit) | double-click `start_app.bat` | `sh start_app.sh` |
+| **Terminal version** | `python run.py terminal` | `python3 run.py terminal` |
 
-Full steps are below. Your accounts and portfolio stay on your own computer.
+The first run sets itself up (about a minute, needs internet), then opens in your browser. It keeps a private
+environment in `.venv`, so it never touches your other Python packages. Press Ctrl+C in the window to stop it.
+Create an account (username + password); it starts completely empty. All versions share the same accounts and data,
+and your portfolio stays on your own computer. (Mac/Linux scripts follow the standard approach but are less tested
+than the Windows ones.)
 
-## Run it
+You can also run it by hand: `python run.py web` (or `app`, `terminal`), add `--no-open` to skip opening the browser.
 
-1. Install Python 3.12 or newer from python.org.
-2. In this folder, install the packages:
-   `py -3.12 -m pip install -r requirements.txt`
-3. Double-click **start_app.bat** (web app, opens in your browser), or run
-   `py -3.12 portfolio_tracker.py` for the terminal version.
-4. **Create an account** (username + password). Your account starts completely empty.
-
-Both versions use the same accounts and the same data.
-
-### Flask web app (`web/`)
-
-The same dashboard as a Flask app with server-drawn charts and a light/dark switch.
-
-1. `pip install -r requirements.txt`
-2. Double-click **start_web.bat**, or run `python web/app.py`, then open http://127.0.0.1:5000
-3. Create an account. Your data stays on your machine, in `web/portfolio_data/`.
-
-Optional environment variables: `XAVI_DATA_DIR` (where accounts are stored), `XAVI_NO_DEMO=1`
-(don't create the local `test` demo account), `XAVI_DEBUG=1` (Flask debug mode),
-`XAVI_SECRET_KEY` (session key; otherwise one is generated and kept locally).
+Optional settings for the web version (environment variables): `XAVI_DATA_DIR` (where accounts are stored),
+`XAVI_PORT` (default 5000), `XAVI_NO_DEMO=1` (don't create the local `test` demo account), `XAVI_DEBUG=1`
+(Flask debug mode), `XAVI_SECRET_KEY` (session key; otherwise one is generated and kept locally),
+`FINNHUB_API_KEY` (optional extra source for analyst ratings).
 The local `test` account is for local testing only. Do not expose the account version to the internet.
+
+## Tests
+
+The repository has an automated test suite (about 110 tests) that runs offline against a fake Yahoo, Nasdaq and news
+feed, so it is fast and doesn't depend on the internet. GitHub runs it on every push on Python 3.10 to 3.13.
+
+```
+pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ### Public demo (sandbox mode)
 
@@ -173,8 +183,17 @@ terminal's own background.
 
 | File | What it is |
 |---|---|
-| `app.py` | Web dashboard (Streamlit) |
+| `web/` | The Flask web app: `app.py`, `xavi_charts.py`, `templates/`, `static/` (installable-app icons and service worker) |
+| `app.py` | Desktop dashboard (Streamlit) |
 | `portfolio_tracker.py` | Terminal dashboard |
-| `isa_core.py` | Data, calculations, news (shared by both) |
+| `isa_core.py` | Data, calculations, news (shared by all three) |
 | `auth.py` | Accounts and passwords |
-| `start_app.bat` | Double-click launcher for the web app |
+| `run.py` | Launcher that works on Windows, Mac and Linux (`python run.py web`) |
+| `start_web.bat`, `start_app.bat`, `start_web.sh`, `start_app.sh` | Double-click / one-line starters that call `run.py` |
+| `tests/` | Automated tests (offline) |
+| `render.yaml` | One-click deploy settings for the free Render host |
+| `requirements.txt`, `web/requirements.txt`, `requirements-dev.txt` | Packages for everything / the web app only / development and tests |
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). XAVI is an information tool, not financial advice.

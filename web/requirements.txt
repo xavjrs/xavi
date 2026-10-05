@@ -1,5 +1,6 @@
-flask
-gunicorn
-yfinance
-requests
-tzdata
+# Web app only (this is what the Render deploy installs).
+flask>=2.3,<4
+gunicorn>=21.2
+yfinance>=1.7,<2
+requests>=2.32,<3
+tzdata>=2025.1

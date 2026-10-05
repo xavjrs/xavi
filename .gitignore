@@ -30,6 +30,8 @@ __pycache__/
 .claude/
 .vscode/
 .env
+.venv/
+.pytest_cache/
 
 # Web app: local data, session secret, old prototype
 web/portfolio_data/
